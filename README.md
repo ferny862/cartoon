@@ -17,7 +17,7 @@ real-money trades.**
 | Step | Contents | Status |
 |---|---|---|
 | 1 | Data layer: downloaders, cache, validation | **done** |
-| 2 | Backtest engine, cost model, tax-lot model, metrics | not started |
+| 2 | Backtest engine, cost model, tax-lot model, metrics | **done** |
 | 3 | Strategies 0-6 | not started |
 | 4 | Walk-forward, Deflated Sharpe, PBO, bootstrap | not started |
 | 5 | Charts and report | not started |
@@ -91,7 +91,7 @@ src/logging_setup.py   logging with secret masking
 src/data/              Tiingo, yfinance, FRED, French downloaders; Parquet cache;
                        validation; DataStore (inception masking, held-out lock)
 src/strategies/        (step 3) one module per strategy -> target weights
-src/backtest/          (step 2) engine, costs, tax lots, metrics
+src/backtest/          engine, cost model, tax lots, metrics, MarketData builder
 src/validation/        (step 4) walk-forward, Deflated Sharpe, PBO, bootstrap
 src/reporting/         (step 5) charts and report
 src/paper/             (step 6) Alpaca paper client and rebalance job
@@ -120,6 +120,49 @@ notebooks/             optional; no untested logic allowed here
   first-date versus inception mismatches, and Tiingo versus yfinance
   disagreements in daily and monthly adjusted returns. Checks only flag
   problems for review. They never change data.
+
+## How the backtest engine works
+
+* **Prices.** The engine uses total-return (dividend- and split-adjusted)
+  closes, so dividends are reinvested in the same fund on the ex-date at no
+  cost. The benchmark is SPY bought once and held.
+* **Timing.** A target set on a signal date is filled at the close one
+  trading day later (`execution.execution_lag_days`). The engine reads only
+  prices up to the current day; a test changes later prices and confirms
+  earlier values don't move.
+* **Trades.** Each execution trades every position to its target weight of
+  the portfolio value net of that execution's costs. Trades under $1 are
+  skipped. Fractional units are allowed by default; a whole-share mode
+  leaves the remainder as cash.
+* **Costs.** Every trade pays 5 bp (basis points) per side for spread plus
+  slippage, with sensitivity runs at 2 and 10 bp. There is no commission.
+  Sales also pay the SEC Section 31 fee ($20.60 per $1M) and the FINRA
+  trading activity fee ($0.000195 per share, capped at $9.79 per trade).
+  Cost drag is reported as costs per year divided by average portfolio value.
+* **Cash.** BIL before May 2007 is a synthetic $1-price fund paying the FRED
+  T-bill rate as daily interest. Every report labels it. Trading costs apply
+  to it like any ETF, which is slightly conservative.
+* **Taxable account.** Positions are tracked in FIFO lots:
+  * A gain is long-term only if the fund was held more than one year.
+  * Each reinvested dividend becomes its own lot.
+  * Qualified-fund dividends must pass the IRS holding test: held more than
+    60 days in the 121-day window starting 60 days before the ex-date.
+    Dividends that fail it are taxed as ordinary income.
+  * Each year's short- and long-term results are netted as on Schedule D,
+    and net losses carry forward.
+  * Each year's tax is paid on the first trading day on or after the next
+    April 15 by selling holdings pro rata. Those sales can realize further
+    gains.
+  * At the end, after-tax value is reported two ways. "Still holding"
+    subtracts taxes owed but unpaid. "Liquidated" also sells everything,
+    paying costs and tax on those gains.
+* **IRAs.** The Roth IRA result is the pre-tax result. The traditional IRA
+  result applies a 29% withdrawal tax to the ending value.
+* **Wash sales** are flagged whenever a losing sale has a purchase of the
+  same or a substantially identical fund within 30 days before or after it.
+  Flags come in two kinds: triggered by a strategy trade, or by dividend
+  reinvestment. Disallowed losses are *not* adjusted, so taxable results for
+  flagged strategies are slightly optimistic.
 
 ## Limitations of free data and of this study
 
@@ -154,6 +197,14 @@ notebooks/             optional; no untested logic allowed here
   * DBC is a commodity pool that issues a K-1 with 60/40 mark-to-market
     treatment. That is **not** modeled: DBC is taxed like an ordinary ETF.
   * Tax rates are flat and illustrative, not your actual brackets.
+  * Each reinvested dividend in the same fund and month is merged into one
+    lot dated at the later date. This can only make a gain short-term,
+    never long-term, so it is the conservative direction.
+  * The dividend holding test treats a lot that is still held as held for
+    the whole window. A lot partly sold is split exactly by the fraction sold.
+  * Unused loss carryforwards at the end of the backtest are given no value.
+  * The SEC and FINRA fees use 2026 rates for the whole history. Historical
+    rates differed, but the effect is well under 1 bp per year.
 * **yfinance** is an unofficial wrapper intended for personal use. It is used
   only as a cross-check, with caching and a 2-second delay between requests.
 * **Few independent trials.** With 6 candidate strategies, the Probability of

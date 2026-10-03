@@ -135,11 +135,14 @@ costs:
   commission_per_trade: 0.0
   spread_slippage_bps: 5            # per side, applied to traded notional
   sensitivity_bps: [2, 5, 10]
-  # Regulatory fees on sales. Values change over time and will be verified
-  # against current SEC / FINRA notices in step 2 before use.
-  sec_fee_per_million: null
-  finra_taf_per_share: null
-  finra_taf_max_per_trade: null
+  # Regulatory fees on sales only, at current rates applied to the whole
+  # history (historical rates differed; the effect is well under 1 bp).
+  # SEC Section 31: $20.60 per $1M of sales from 2026-04-04 (SEC fee rate
+  # advisory 2026-2). FINRA TAF: $0.000195/share sold, max $9.79 per trade,
+  # from 2026-01-01 (FINRA By-Laws Schedule A, Section 1). Verified 2026-10-03.
+  sec_fee_per_million: 20.60
+  finra_taf_per_share: 0.000195
+  finra_taf_max_per_trade: 9.79
 
 taxes:
   federal:
