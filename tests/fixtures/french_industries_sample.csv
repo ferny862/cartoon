@@ -1,0 +1,21 @@
+This file was created by CMPT_IND_RETS using the 202608 CRSP database.
+It contains value- and equal-weighted returns for 10 industry portfolios.
+The portfolios are constructed at the end of June.
+Missing data are indicated by -99.99 or -999.
+
+  Average Value Weighted Returns -- Monthly
+,NoDur,Durbl,Manuf,Enrgy,HiTec,Telcm,Shops,Hlth ,Utils,Other
+192607,    1.45,   15.55,    4.69,   -1.18,    2.90,    0.83,    0.11,    1.77,    7.04,    2.13
+192608,    3.97,    3.68,    2.81,    3.47,    2.66,    2.17,   -0.71,    4.25,   -1.69,    4.35
+192609,    1.14,    4.80,    1.15,   -3.39,   -0.38,    2.41,    0.21,    0.69,    2.04,    0.29
+
+  Average Equal Weighted Returns -- Monthly
+,NoDur,Durbl,Manuf,Enrgy,HiTec,Telcm,Shops,Hlth ,Utils,Other
+192607,    0.50,   -0.10,    1.00,    1.00,    1.00,    1.00,    1.00,  -99.99,    1.00,    1.00
+192608,    2.50,    2.00,    2.00,    2.00,    2.00,    2.00,    2.00,    2.00,    2.00,    2.00
+192609,    3.50,    3.00,    3.00,    3.00,    3.00,    3.00,    3.00,    3.00,    3.00,    3.00
+
+  Average Value Weighted Returns -- Annual
+,NoDur,Durbl,Manuf,Enrgy,HiTec,Telcm,Shops,Hlth ,Utils,Other
+1927,   30.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00
+1928,   10.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00,   20.00

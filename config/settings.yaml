@@ -1,0 +1,241 @@
+# =============================================================================
+# Project settings. This is the single source of truth for universes, costs,
+# tax rates, dates and strategy parameters.
+#
+# RULES
+#  * Do not change strategy parameters, add strategies, or move the held-out
+#    split without explicit approval. Every configuration ever run is logged
+#    (see validation.trial_log) because the overfitting statistics need the
+#    true number of trials.
+#  * Secrets never go in this file. They are read from environment variables
+#    (see .env.example).
+# =============================================================================
+
+project:
+  starting_capital: 100000          # USD; results are reported as percentages
+  goal: risk_adjusted               # rank by Sharpe/Sortino/Calmar/max drawdown, not raw CAGR
+  log_dir: logs
+
+# -----------------------------------------------------------------------------
+# Dates and the in-sample / held-out split
+# -----------------------------------------------------------------------------
+dates:
+  data_start: "1993-01-01"          # earliest ETF data requested (SPY launched Jan 1993)
+  end: null                         # null = latest available data
+  heldout_start: "2021-10-01"       # last ~5 years are held out (approved 2026-10-03)
+  heldout_unlocked: false           # flip ONLY after the final configuration is approved;
+                                    # first evaluation must be recorded in docs/heldout_log.md
+
+# Calendar-year regime windows (objective boundaries, not hindsight peaks).
+# The 2022 window lies inside the held-out period and stays hidden until unlocked.
+regimes:
+  bear_2000_2002:   ["2000-01-01", "2002-12-31"]
+  gfc_2008_2009:    ["2008-01-01", "2009-12-31"]
+  bull_2010s:       ["2010-01-01", "2019-12-31"]
+  covid_2020:       ["2020-01-01", "2020-12-31"]
+  bear_2022:        ["2022-01-01", "2022-12-31"]
+
+# -----------------------------------------------------------------------------
+# Instruments. inception = approximate first trading date. The data layer
+# drops any rows before inception and warns if the first downloaded date
+# disagrees by more than data.validation.inception_tolerance_days.
+#
+# tax_character controls how distributions are taxed in the taxable account:
+#   qualified         -> qualified-dividend rate (simplification: 100% qualified)
+#   ordinary          -> ordinary income rate, state taxable
+#   ordinary_treasury -> ordinary income rate, state exempt (Treasury interest)
+#   ordinary_reit     -> ordinary income rate (Section 199A deduction ignored)
+#   commodity_pool    -> treated as ordinary for distributions; see README:
+#                        real K-1 / 60-40 treatment is NOT modeled
+# -----------------------------------------------------------------------------
+instruments:
+  SPY:  {name: "SPDR S&P 500 ETF Trust",              inception: "1993-01-22", asset_class: us_equity,     tax_character: qualified}
+  EFA:  {name: "iShares MSCI EAFE ETF",                inception: "2001-08-14", asset_class: intl_equity,   tax_character: qualified}
+  VEU:  {name: "Vanguard FTSE All-World ex-US ETF",    inception: "2007-03-02", asset_class: intl_equity,   tax_character: qualified,         enabled: false}
+  IEF:  {name: "iShares 7-10 Year Treasury Bond ETF",  inception: "2002-07-22", asset_class: treasury,      tax_character: ordinary_treasury}
+  AGG:  {name: "iShares Core US Aggregate Bond ETF",   inception: "2003-09-22", asset_class: agg_bond,      tax_character: ordinary}
+  BND:  {name: "Vanguard Total Bond Market ETF",       inception: "2007-04-03", asset_class: agg_bond,      tax_character: ordinary,          enabled: false}
+  VNQ:  {name: "Vanguard Real Estate ETF",             inception: "2004-09-23", asset_class: reit,          tax_character: ordinary_reit}
+  DBC:  {name: "Invesco DB Commodity Index Tracking",  inception: "2006-02-03", asset_class: commodity,     tax_character: commodity_pool}
+  BIL:  {name: "SPDR Bloomberg 1-3 Month T-Bill ETF",  inception: "2007-05-25", asset_class: tbill,         tax_character: ordinary_treasury}
+  SHV:  {name: "iShares Short Treasury Bond ETF",      inception: "2007-01-05", asset_class: tbill,         tax_character: ordinary_treasury, enabled: false}
+  QUAL: {name: "iShares MSCI USA Quality Factor ETF",  inception: "2013-07-16", asset_class: us_equity,     tax_character: qualified}
+  MTUM: {name: "iShares MSCI USA Momentum Factor ETF", inception: "2013-04-16", asset_class: us_equity,     tax_character: qualified}
+  VLUE: {name: "iShares MSCI USA Value Factor ETF",    inception: "2013-04-16", asset_class: us_equity,     tax_character: qualified}
+  USMV: {name: "iShares MSCI USA Min Vol Factor ETF",  inception: "2011-10-18", asset_class: us_equity,     tax_character: qualified}
+  XLB:  {name: "Materials Select Sector SPDR",         inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLE:  {name: "Energy Select Sector SPDR",            inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLF:  {name: "Financial Select Sector SPDR",         inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLI:  {name: "Industrial Select Sector SPDR",        inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLK:  {name: "Technology Select Sector SPDR",        inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLP:  {name: "Consumer Staples Select Sector SPDR",  inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLU:  {name: "Utilities Select Sector SPDR",         inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLV:  {name: "Health Care Select Sector SPDR",       inception: "1998-12-16", asset_class: sector,        tax_character: qualified}
+  XLY:  {name: "Consumer Discretionary Select Sector SPDR", inception: "1998-12-16", asset_class: sector,   tax_character: qualified}
+  # Excluded pending approval (short histories complicate the backtest):
+  XLRE: {name: "Real Estate Select Sector SPDR",       inception: "2015-10-07", asset_class: sector,        tax_character: ordinary_reit,     enabled: false}
+  XLC:  {name: "Communication Services Select Sector SPDR", inception: "2018-06-18", asset_class: sector,   tax_character: qualified,         enabled: false}
+
+# Cash: BIL total return after its inception; FRED 3-month T-bill (DTB3)
+# before it. Kenneth French RF is used for the pre-1954 French-data runs.
+cash:
+  etf: BIL
+  pre_inception_source: fred_dtb3
+
+benchmark: SPY                      # dividend-adjusted total return
+
+# -----------------------------------------------------------------------------
+# Data sources
+# -----------------------------------------------------------------------------
+data:
+  cache_dir: data/cache
+  cache_max_age_days: 1             # re-download after this many days
+  reference_calendar_symbol: SPY    # trading-day calendar used to detect missing days
+  max_ffill_days: 3                 # interior gaps up to this many days are forward-filled
+                                    # (never before the first valid price)
+  primary: tiingo
+  crosscheck: yfinance
+  tiingo:
+    base_url: "https://api.tiingo.com"
+    max_requests_per_hour: 50
+    max_requests_per_day: 1000
+    max_unique_symbols_per_month: 500
+    timeout_seconds: 30
+  yfinance:
+    min_seconds_between_requests: 2.0
+  fred:
+    url: "https://fred.stlouisfed.org/graph/fredgraph.csv"
+    series: DTB3
+    timeout_seconds: 30
+  french:
+    base_url: "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp"
+    industries_10: 10_Industry_Portfolios
+    industries_12: 12_Industry_Portfolios
+    factors: F-F_Research_Data_Factors
+    timeout_seconds: 60
+  validation:
+    extreme_move_threshold: 0.20    # |daily return| above this is flagged for review
+    stale_run_days: 5               # this many consecutive identical closes = stale
+    max_staleness_business_days: 5  # last date older than this vs. today = stale
+    max_gap_business_days: 3        # reference-calendar gaps longer than this are flagged
+    inception_tolerance_days: 10
+    crosscheck_daily_tolerance: 0.005    # |daily return difference| between sources
+    crosscheck_monthly_tolerance: 0.002  # |monthly return difference| between sources
+
+# -----------------------------------------------------------------------------
+# Execution, costs and taxes (used from step 2 onward)
+# -----------------------------------------------------------------------------
+execution:
+  rebalance_frequency: monthly
+  signal_time: month_end_close      # signals use the last trading day's close
+  execution_lag_days: 1             # orders fill at the close this many trading days later
+  allow_fractional_shares: true     # backtest only; paper trading uses whole shares by default
+
+costs:
+  commission_per_trade: 0.0
+  spread_slippage_bps: 5            # per side, applied to traded notional
+  sensitivity_bps: [2, 5, 10]
+  # Regulatory fees on sales. Values change over time and will be verified
+  # against current SEC / FINRA notices in step 2 before use.
+  sec_fee_per_million: null
+  finra_taf_per_share: null
+  finra_taf_max_per_trade: null
+
+taxes:
+  federal:
+    short_term: 0.24                # held one year or less; taxed as ordinary income
+    long_term: 0.15
+    qualified_dividend: 0.15
+    ordinary: 0.24
+  state:
+    rate: 0.05                      # flat, applied to all income types
+    treasury_interest_exempt: true
+  lot_method: fifo
+  pay_taxes_from_portfolio: true    # sell holdings to pay each year's tax bill
+  carry_forward_losses: true
+  ordinary_income_loss_offset: 0    # the $3,000/yr offset is disabled
+  report_liquidation: both          # after-tax "still holding" and "liquidated at end"
+  wash_sale_window_days: 30
+  traditional_ira_withdrawal_rate: 0.29   # federal ordinary + state, applied at the end
+  substantially_identical:          # groups treated as the same security for wash-sale flags
+    - [SPY, IVV, VOO]
+    - [BIL, SHV]
+    - [AGG, BND]
+    - [EFA, VEU]
+
+# -----------------------------------------------------------------------------
+# Strategies: published defaults, NO tuning without approval.
+# -----------------------------------------------------------------------------
+strategies:
+  benchmark:
+    module: buy_and_hold
+    symbol: SPY
+  trend_faber:
+    module: trend_filter
+    risk_asset: SPY
+    sma_months: 10
+    cash: BIL
+  gem:
+    module: gem
+    us: SPY
+    intl: EFA
+    bonds: AGG
+    cash: BIL
+    lookback_months: 12
+  gtaa5:
+    module: gtaa
+    assets: [SPY, EFA, IEF, VNQ, DBC]
+    sma_months: 10
+    cash: BIL
+  factor_blend:
+    module: factor_blend
+    assets: [QUAL, MTUM, VLUE, USMV]
+    rebalance: annual
+    drift_threshold: 0.05           # absolute weight drift that triggers a rebalance
+    note: "Factor ETFs mostly start in 2013; much shorter history."
+  sector_mom_sector_filter:
+    module: sector_momentum
+    sectors: [XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY]
+    lookback_months: 12
+    skip_months: 1
+    top_n: 3
+    filter: per_sector_sma
+    sma_months: 10
+    cash: BIL
+  sector_mom_market_filter:
+    module: sector_momentum
+    sectors: [XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY]
+    lookback_months: 12
+    skip_months: 1
+    top_n: 3
+    filter: market_sma
+    market: SPY
+    sma_months: 10
+    cash: BIL
+
+# -----------------------------------------------------------------------------
+# Validation (used from step 4 onward)
+# -----------------------------------------------------------------------------
+validation:
+  trial_log: logs/trials.jsonl      # every configuration ever run is appended here
+  walk_forward:
+    mode: expanding
+    window_years: 5
+  bootstrap:
+    block_months: 12
+    n_samples: 5000
+    seed: 12345
+  pbo:
+    n_partitions: 16                # CSCV S; must be even
+
+# -----------------------------------------------------------------------------
+# Paper trading (step 6). Live trading does not exist in this phase.
+# -----------------------------------------------------------------------------
+paper:
+  broker: alpaca
+  base_url: "https://paper-api.alpaca.markets"
+  strategy: null                    # chosen after validation
+  dry_run: true                     # default: print orders, submit nothing
+  fractional_shares: false
+  order_type: market
+  log_file: logs/paper_trading.log
