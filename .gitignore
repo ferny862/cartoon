@@ -4,9 +4,9 @@
 !.env.example
 
 # Data and outputs (re-creatable)
-data/
-logs/
-reports/output/
+/data/
+/logs/
+/reports/output/
 
 # Python
 __pycache__/
