@@ -32,6 +32,7 @@ class StrategyRun:
     taxable: BacktestResult | None
     summary: dict
     cost_bps: float
+    benchmark_taxable: BacktestResult | None = None
 
 
 def _engine_kwargs(settings: dict) -> dict:
@@ -52,23 +53,30 @@ def _run(strategy, settings: dict, market: MarketData, benchmark_symbol: str, co
     pre = run_backtest(weights, market, costs, name=strategy.name, **kw)
     bench_w = pd.DataFrame({benchmark_symbol: [1.0]}, index=[weights.index[0]])
     bench = run_backtest(bench_w, market, costs, name=f"{benchmark_symbol} buy and hold", **kw)
-    tax_res = None
+    tax_res = bench_tax = None
+    ira_rate = settings["taxes"].get("traditional_ira_withdrawal_rate")
     if taxable:
-        tax_res = run_backtest(weights, market, costs, tax=TaxSettings.from_settings(settings),
-                               name=f"{strategy.name} (taxable)", **kw)
-    summary = summarize(pre, bench, market.risk_free, taxable=tax_res,
-                        traditional_ira_rate=settings["taxes"].get("traditional_ira_withdrawal_rate"))
+        tax_settings = TaxSettings.from_settings(settings)
+        tax_res = run_backtest(weights, market, costs, tax=tax_settings, name=f"{strategy.name} (taxable)", **kw)
+        bench_tax = run_backtest(bench_w, market, costs, tax=tax_settings,
+                                 name=f"{benchmark_symbol} buy and hold (taxable)", **kw)
+    summary = summarize(pre, bench, market.risk_free, taxable=tax_res, traditional_ira_rate=ira_rate)
     summary["strategy"] = strategy.name
     summary["universe"] = universe
     summary["cost_bps"] = costs.spread_slippage_bps
-    summary["benchmark_cagr_pretax"] = summarize(bench, None, market.risk_free)["cagr_pretax"]
+    b = summarize(bench, None, market.risk_free, taxable=bench_tax, traditional_ira_rate=ira_rate)
+    for key in ("cagr_pretax", "sharpe", "sortino", "max_drawdown", "volatility", "calmar",
+                "cagr_traditional_ira", "cagr_aftertax_holding", "cagr_aftertax_liquidated"):
+        if key in b:
+            summary[f"benchmark_{key}"] = b[key]
     if trial_log is not None:
         trial_log.record(strategy.name, params, {
             "universe": universe, "cost_bps": costs.spread_slippage_bps, "taxable": taxable,
             "start": str(pre.start.date()), "end": str(pre.end.date()),
             "heldout_unlocked": bool(settings["dates"].get("heldout_unlocked", False)),
         })
-    return StrategyRun(strategy.name, universe, weights, pre, bench, tax_res, summary, costs.spread_slippage_bps)
+    return StrategyRun(strategy.name, universe, weights, pre, bench, tax_res, summary, costs.spread_slippage_bps,
+                       bench_tax)
 
 
 def run_strategy(name: str, settings: dict, market: MarketData, cost_bps: float | None = None,

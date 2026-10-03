@@ -20,7 +20,7 @@ real-money trades.**
 | 2 | Backtest engine, cost model, tax-lot model, metrics | **done** |
 | 3 | Strategies 0-6, runner, trial log, French sanity check | **done** |
 | 4 | Walk-forward, Deflated Sharpe, PBO, bootstrap | **done** |
-| 5 | Charts and report | not started |
+| 5 | Charts, downturn analysis, pre-registered verdict, HTML/Markdown report | **done** |
 | 6 | Alpaca paper trading (paper endpoint only) | not started |
 
 ## Approved research decisions (2026-10-03)
@@ -81,6 +81,9 @@ python -m src.backtest french                                # strategies 5-6 on
 # Validation: walk-forward windows, regimes, Deflated Sharpe, PBO, bootstrap
 python -m src.validation                                     # writes logs/validation_<date>/
 
+# Full report: reports/output/report_<date>.html and summary_<date>.md
+python -m src.reporting
+
 # Tests (all network calls are mocked; real network access is blocked)
 pytest
 ```
@@ -105,7 +108,7 @@ src/data/              Tiingo, yfinance, FRED, French downloaders; Parquet cache
 src/strategies/        one module per strategy -> target weights per signal date
 src/backtest/          engine, cost model, tax lots, metrics, MarketData builder
 src/validation/        (step 4) walk-forward, Deflated Sharpe, PBO, bootstrap
-src/reporting/         (step 5) charts and report
+src/reporting/         charts, downturns, pre-registered verdict, HTML/Markdown report
 src/paper/             (step 6) Alpaca paper client and rebalance job
 tests/                 pytest suite
 docs/heldout_log.md    written log of every held-out evaluation
@@ -217,6 +220,45 @@ first, partial month of each strategy is dropped.
   return and in Sharpe ratio between each strategy and SPY over the same
   period. A range that includes zero means the difference cannot be told
   apart from luck.
+
+## The report and the verdict
+
+`python -m src.reporting` runs everything and writes one self-contained HTML
+file (charts embedded, light and dark versions) plus a short Markdown summary.
+It contains:
+* the headline metrics table, with SPY over the same dates in each row
+* charts: growth of $1 on a log scale, drawdowns, rolling 3-year excess return
+  over SPY, calendar-year returns, and monthly allocation
+* results by account type and the cost sensitivity at 2, 5 and 10 bp
+* the sub-period tables, the downturn analysis and every overfitting check
+  explained in plain English
+* the French long-history appendix
+* the verdict
+
+**Downturns.** Each downturn is SPY's deepest peak-to-recovery decline whose
+trough falls in 2000–02, 2007–09, 2020 or 2022 (2022 stays locked).
+Strategies are measured from SPY's peak to SPY's recovery:
+* **Avoided:** the strategy fell at most half as far as SPY.
+* **Whipsawed:** it cut risk exposure by at least 30 percentage points and
+  later added it back while SPY was higher than when it sold.
+
+For each strategy the report also lists what it held going into each
+downturn and on average from peak to trough.
+
+**Verdict.** The rules were pre-registered in `config/settings.yaml`
+(`report.verdict_criteria`) before any real data was seen. A strategy is
+*preferable to holding SPY* for an account type only if all of these hold:
+* the bootstrap 95% range for its Sharpe advantage is above zero
+* its Deflated Sharpe Ratio is at least 0.95
+* the main PBO is below 0.5
+* its drawdowns are smaller than SPY's in most evaluated windows
+* its CAGR is within 1 point a year of SPY's (after tax and liquidated for
+  the taxable verdict)
+
+A strategy that passes the drawdown test but fails a statistical test is
+reported as *lower drawdowns, but not distinguishable from luck*. Anything
+else is *hold SPY*. If nothing qualifies, the report says plainly that
+buying and holding an S&P 500 index fund is the better choice.
 
 ## How the backtest engine works
 

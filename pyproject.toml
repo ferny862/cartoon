@@ -29,6 +29,9 @@ all = ["etf-strategy-research[crosscheck,paper,dev]"]
 [tool.setuptools.packages.find]
 include = ["src*"]
 
+[tool.setuptools.package-data]
+"src.reporting" = ["templates/*.j2"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

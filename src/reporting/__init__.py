@@ -1,1 +1,1 @@
-"""Charts and HTML/Markdown report (step 5)."""
+"""Charts, downturn analysis, the pre-registered verdict, and the HTML/Markdown report."""
