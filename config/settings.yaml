@@ -237,15 +237,32 @@ french_sanity:
 # -----------------------------------------------------------------------------
 validation:
   trial_log: logs/trials.jsonl      # every configuration ever run is appended here
+  frequency: monthly                # returns used for DSR, PBO and the bootstrap (approved 2026-10-03)
   walk_forward:
-    mode: expanding
-    window_years: 5
+    # Nothing is fitted, so walk-forward = stability across sub-periods.
+    windows:                        # non-overlapping, compared with SPY over the same window
+      - ["2000-01-01", "2004-12-31"]
+      - ["2005-01-01", "2009-12-31"]
+      - ["2010-01-01", "2014-12-31"]
+      - ["2015-01-01", "2019-12-31"]
+      - ["2020-01-01", "2021-09-30"]
+    expanding_step_years: 5         # also: from each strategy's start, growing 5 years at a time
   bootstrap:
+    method: circular_block
     block_months: 12
     n_samples: 5000
     seed: 12345
   pbo:
     n_partitions: 16                # CSCV S; must be even
+    candidate_sets:                 # each set is evaluated on its common monthly history
+      main:
+        strategies: [benchmark, trend_faber, gem, gtaa5, sector_mom_sector_filter, sector_mom_market_filter]
+        note: "Six candidates from Dec 2006 (factor blend excluded for its short history)"
+      secondary:
+        strategies: [benchmark, trend_faber, gem, gtaa5, factor_blend, sector_mom_sector_filter, sector_mom_market_filter]
+        note: "All seven from Jul 2013; thin history, interpret with caution"
+  dsr:
+    trial_universe: etf             # trials counted from the log for this universe only
 
 # -----------------------------------------------------------------------------
 # Paper trading (step 6). Live trading does not exist in this phase.

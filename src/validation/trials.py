@@ -47,7 +47,11 @@ class TrialLog:
         with open(self.path, encoding="utf-8") as fh:
             return [json.loads(line) for line in fh if line.strip()]
 
-    def n_trials(self, strategies: list[str] | None = None) -> int:
-        """Distinct parameter sets run, optionally limited to some strategies."""
-        hashes = {e["config_hash"] for e in self.entries() if strategies is None or e["strategy"] in strategies}
+    def n_trials(self, strategies: list[str] | None = None, universe: str | None = None) -> int:
+        """Distinct parameter sets run, optionally limited to some strategies or one data universe."""
+        hashes = {
+            e["config_hash"] for e in self.entries()
+            if (strategies is None or e["strategy"] in strategies)
+            and (universe is None or e.get("context", {}).get("universe") == universe)
+        }
         return len(hashes)

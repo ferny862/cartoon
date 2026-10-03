@@ -19,7 +19,7 @@ real-money trades.**
 | 1 | Data layer: downloaders, cache, validation | **done** |
 | 2 | Backtest engine, cost model, tax-lot model, metrics | **done** |
 | 3 | Strategies 0-6, runner, trial log, French sanity check | **done** |
-| 4 | Walk-forward, Deflated Sharpe, PBO, bootstrap | not started |
+| 4 | Walk-forward, Deflated Sharpe, PBO, bootstrap | **done** |
 | 5 | Charts and report | not started |
 | 6 | Alpaca paper trading (paper endpoint only) | not started |
 
@@ -77,6 +77,9 @@ python -m src.data validate
 python -m src.backtest run                                   # all strategies, 5 bp, with taxes
 python -m src.backtest run --strategies gem --cost-bps 2 5 10
 python -m src.backtest french                                # strategies 5-6 on French industries
+
+# Validation: walk-forward windows, regimes, Deflated Sharpe, PBO, bootstrap
+python -m src.validation                                     # writes logs/validation_<date>/
 
 # Tests (all network calls are mocked; real network access is blocked)
 pytest
@@ -165,6 +168,55 @@ FRED T-bill series before BIL existed.
   French's risk-free rate as cash and French's market return for the market
   filter. These runs have no costs or taxes, and the results are **gross and
   non-investable**. They choose the top 3 of 10 industries, not 9 sectors.
+
+## How the validation works
+
+All checks use **monthly** returns, in-sample only (before 2021-10-01). The
+first, partial month of each strategy is dropped.
+
+* **Walk-forward / sub-periods.** No strategy fits parameters to past data,
+  so walk-forward analysis here means checking whether results against SPY
+  hold up in separate periods. There are three tables:
+  * Fixed non-overlapping windows: 2000–04, 2005–09, 2010–14, 2015–19 and
+    2020 to September 2021.
+  * Expanding windows that start at each strategy's own start and grow 5
+    years at a time.
+  * The named regimes.
+
+  A strategy that starts partway through a window is compared from its own
+  start against SPY bought the same day. Those rows are marked `partial`,
+  with the actual dates. Windows covering less than about 10 months (3 for
+  the regimes) are marked `not live`. The 2022 regime shows
+  `held out (locked)` until the held-out period is unlocked.
+* **Deflated Sharpe Ratio** (Bailey and López de Prado, 2014). This is the
+  probability that a strategy's true Sharpe ratio beats the best Sharpe
+  ratio that luck alone would produce, given how many configurations were
+  tried. It also accounts for skew, fat tails and the length of the record.
+  The number of configurations comes from `logs/trials.jsonl` (ETF universe
+  only). The spread of Sharpe ratios across configurations is measured
+  across the current candidates, each over its own history. 0.95 or above
+  is conventionally significant.
+* **Probability of Backtest Overfitting** (Bailey, Borwein, López de Prado
+  and Zhu, 2017), using combinatorially symmetric cross-validation. The
+  common monthly history is split into 16 blocks. For each of the 12,870
+  ways to use half the blocks as in-sample, the method picks the best
+  in-sample candidate and checks where it ranks in the other half. PBO is
+  the share of splits where the in-sample winner falls in the bottom half
+  out of sample. Exact-median ranks, possible with an odd number of
+  candidates, count as half. Pure noise gives about 0.5. Two candidate sets
+  are used:
+  * main: 6 candidates including SPY, from December 2006, without the
+    factor blend
+  * secondary: all 7, from July 2013 (a thin history)
+
+  With so few candidates and months, PBO is a noisy estimate. A single
+  pure-noise sample can land anywhere from about 0.1 to 0.9.
+* **Block bootstrap.** A circular block bootstrap with 12-month blocks,
+  5,000 resamples and a fixed seed. Strategy, SPY and T-bill months are
+  resampled together. It gives 95% ranges for the difference in annualized
+  return and in Sharpe ratio between each strategy and SPY over the same
+  period. A range that includes zero means the difference cannot be told
+  apart from luck.
 
 ## How the backtest engine works
 
