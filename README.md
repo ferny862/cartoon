@@ -21,7 +21,7 @@ real-money trades.**
 | 3 | Strategies 0-6, runner, trial log, French sanity check | **done** |
 | 4 | Walk-forward, Deflated Sharpe, PBO, bootstrap | **done** |
 | 5 | Charts, downturn analysis, pre-registered verdict, HTML/Markdown report | **done** |
-| 6 | Alpaca paper trading (paper endpoint only) | not started |
+| 6 | Alpaca paper trading (paper endpoint only, dry run by default) | **done** |
 
 ## Approved research decisions (2026-10-03)
 
@@ -109,7 +109,7 @@ src/strategies/        one module per strategy -> target weights per signal date
 src/backtest/          engine, cost model, tax lots, metrics, MarketData builder
 src/validation/        (step 4) walk-forward, Deflated Sharpe, PBO, bootstrap
 src/reporting/         charts, downturns, pre-registered verdict, HTML/Markdown report
-src/paper/             (step 6) Alpaca paper client and rebalance job
+src/paper/             Alpaca paper client, safety guards, monthly rebalance job
 tests/                 pytest suite
 docs/heldout_log.md    written log of every held-out evaluation
 notebooks/             optional; no untested logic allowed here
@@ -355,10 +355,84 @@ buying and holding an S&P 500 index fund is the better choice.
 * **Past performance does not predict future results.** A backtest is a
   measurement under assumptions, not a forecast.
 
+## Paper trading (Alpaca paper endpoint only)
+
+Paper trading uses the official `alpaca-py` client. It only ever talks to
+`https://paper-api.alpaca.markets`.
+
+**Setup**
+1. Create an Alpaca paper account. Put its keys in `.env` as
+   `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`, and set `PAPER_TRADING=true`.
+2. Choose the strategy after reviewing the report: set `paper.strategy` in
+   `config/settings.yaml`. Until then, `plan` refuses to run. Use one Alpaca
+   paper account per strategy.
+3. Keep `paper.dry_run: true` until the dry runs look right.
+
+**Monthly cycle.** This mirrors the backtest: signal at the month-end close,
+fill at the next trading day's close.
+
+| When (US Eastern) | Command | What it does |
+|---|---|---|
+| Month-end, after the close | `python -m src.data download` then `python -m src.paper plan` | Computes this month's targets from the latest month-end prices, reads paper positions, saves the intended orders to `logs/paper/plan_*.json`. Sends nothing. |
+| Next trading day, before 15:45 | `python -m src.paper submit` | Dry run: prints the orders. Real paper orders need **both** `paper.dry_run: false` **and** `--execute`. Orders are market-on-close in whole shares. |
+| Same day, after the close | `python -m src.data download` then `python -m src.paper reconcile` | Records fills in `logs/paper/fills.csv` and compares each fill with that day's close. That close is the price the backtest assumes, so the difference is real slippage in bp (positive = worse). |
+| Any time | `python -m src.paper status` | Shows paper equity, cash and positions. |
+
+Everything is logged to `logs/paper_trading.log`.
+
+The plan keeps 0.5% of equity uninvested so whole-share buys can't exceed
+cash. It skips trades under $25, but always closes positions the strategy
+no longer holds. A month with no new signal leaves positions unchanged.
+That applies to buy-and-hold after the first purchase, and to the factor
+blend outside December unless drift exceeds 5 points.
+
+**Example cron lines.** Run `crontab -e`. These assume the machine's
+timezone is US Eastern and the project lives in `~/cartoon`. Cron can't
+target "the last trading day", so the plan job runs on days 28–31 and on
+days 1–3. Each run plans from the latest *complete* month-end, so repeats are
+harmless, and you review the newest plan before submitting.
+```cron
+30 17 28-31,1-3 * *  cd ~/cartoon && .venv/bin/python -m src.data download --no-crosscheck && .venv/bin/python -m src.paper plan
+00 15 1-4 * *        cd ~/cartoon && .venv/bin/python -m src.paper submit            # dry run unless you add --execute
+30 17 1-5 * *        cd ~/cartoon && .venv/bin/python -m src.data download --no-crosscheck && .venv/bin/python -m src.paper reconcile
+```
+The day-of-week field is deliberately `*`. When both day-of-month and
+day-of-week are restricted, cron runs the job if *either* matches, which
+would mean every weekday. Weekend runs are harmless: `submit` refuses while
+the market is closed.
+`submit` refuses to run in four cases:
+* the market is closed
+* it is past the 15:45 ET cutoff
+* it is the signal day itself (orders must fill the next trading day)
+* the plan was already submitted
+
+**The held-out exception.** Paper trading needs today's prices, which fall
+in the locked held-out period. One narrow, logged path is allowed:
+`DataStore.signal_data`. It returns recent prices only for computing this
+month's targets and measuring fill slippage, and every use is appended to
+`logs/heldout_signal_access.log`. It never computes or reports backtest
+performance for the held-out period. The normal analysis path stays locked.
+
 ## Safety
 
-* No live-trading code exists. The paper client (step 6) will refuse to start
-  unless `PAPER_TRADING=true` and the base URL is Alpaca's paper endpoint.
-* A future live module would need its own explicitly named environment flag
-  plus an interactive confirmation, and would be disabled by default.
-* This project never connects to Robinhood in any form.
+* **Paper only.** The paper client refuses to start unless
+  `PAPER_TRADING=true` and the configured base URL is exactly the Alpaca
+  paper endpoint. It always builds the broker client with `paper=True` and
+  the paper URL, then re-checks the URL after construction.
+* **No live code.** There is no live-trading code in this project. A test
+  scans the source and fails if any non-paper Alpaca host or live setting
+  appears.
+* **Dry run by default.** Orders are sent only when `paper.dry_run: false`
+  **and** `--execute` are both given.
+* **No Robinhood.** This project never connects to Robinhood in any form,
+  including its Agentic Trading or crypto APIs. A test fails if the source
+  mentions it.
+
+**If live trading is ever added later**, it must be a separate module, off by
+default, that requires all of these:
+1. its own explicitly named environment flag, never `PAPER_TRADING`
+2. an interactive typed confirmation on every run
+3. a separate config section
+4. its own tests
+
+It must not reuse or loosen any of the paper guards above.

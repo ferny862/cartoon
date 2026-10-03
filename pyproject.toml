@@ -36,3 +36,7 @@ include = ["src*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+filterwarnings = [
+    "error::FutureWarning",                                      # pandas deprecations fail the suite
+    "ignore:websockets.legacy is deprecated:DeprecationWarning", # third-party, from alpaca-py's dependency
+]

@@ -292,11 +292,21 @@ report:
 # -----------------------------------------------------------------------------
 # Paper trading (step 6). Live trading does not exist in this phase.
 # -----------------------------------------------------------------------------
+# Safety: the client refuses to start unless the environment variable
+# PAPER_TRADING is "true" AND base_url is exactly the Alpaca paper endpoint.
+# There is no code path to a live endpoint. Submitting needs BOTH
+# dry_run: false here AND the --execute flag on the command line.
 paper:
   broker: alpaca
   base_url: "https://paper-api.alpaca.markets"
-  strategy: null                    # chosen after validation
+  strategy: null                    # chosen after validation; the job refuses to plan without one
   dry_run: true                     # default: print orders, submit nothing
-  fractional_shares: false
+  fractional_shares: false          # market-on-close orders are whole shares only
   order_type: market
+  time_in_force: cls                # market-on-close: fills at the close, as the backtest assumes
+  submit_cutoff_et: "15:45"         # refuse to submit later than this (Alpaca rejects MOC after 15:50 ET)
+  cash_buffer: 0.005                # leave 0.5% uninvested so whole-share buys cannot exceed cash
+  min_trade_value: 25.0             # skip trades smaller than this many dollars
+  max_data_age_days: 5              # refuse to plan if the newest price is older than this
+  state_dir: logs/paper             # plans, submissions, fills and slippage records
   log_file: logs/paper_trading.log

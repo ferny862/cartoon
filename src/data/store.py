@@ -192,7 +192,8 @@ class DataStore:
         return pd.DatetimeIndex(cal, name="date")
 
     # -- analysis frames (inception-masked, aligned, held-out clipped) ------
-    def _field(self, symbols: list[str], field: str, include_heldout: bool | None) -> pd.DataFrame:
+    def _field(self, symbols: list[str], field: str, include_heldout: bool | None,
+               _signal_only: bool = False) -> pd.DataFrame:
         cal = self.calendar()
         cols = {}
         for sym in symbols:
@@ -208,6 +209,8 @@ class DataStore:
         else:
             df = df.reindex(cal).fillna(0.0)  # no dividend on missing days
         df = apply_inception(df, self.inception)
+        if _signal_only:
+            return df
         return clip_heldout(df, self.settings, include_heldout)
 
     def adjusted_closes(self, symbols: list[str], include_heldout: bool | None = None) -> pd.DataFrame:
@@ -236,6 +239,29 @@ class DataStore:
             etf_px = etf_px.reindex(cal)
         out = splice_cash_returns(etf_px, fred_ret)
         return clip_heldout(out, self.settings, include_heldout)
+
+    def signal_data(self, symbols: list[str], purpose: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """(adjusted closes, raw closes) including recent dates, for paper trading ONLY.
+
+        This is the single approved exception to the held-out lock: paper
+        trading needs today's prices to compute this month's target weights
+        and to measure fill slippage. It must never be used to compute or
+        report backtest performance. Every call is logged to
+        logs/heldout_signal_access.log.
+        """
+        from datetime import datetime, timezone
+
+        from src.config import PROJECT_ROOT
+
+        log.warning("Held-out signal-only access for %s: %s", purpose, ", ".join(symbols))
+        log_dir = PROJECT_ROOT / self.settings["project"]["log_dir"]
+        log_dir.mkdir(parents=True, exist_ok=True)
+        with open(log_dir / "heldout_signal_access.log", "a", encoding="utf-8") as fh:
+            stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            fh.write(f"{stamp}\t{purpose}\t{','.join(symbols)}\n")
+        adj = self._field(symbols, "adj_close", None, _signal_only=True)
+        raw = self._field(symbols, "close", None, _signal_only=True).replace(0.0, float("nan"))
+        return adj, raw
 
     def risk_free_returns(self, include_heldout: bool | None = None) -> pd.Series:
         """Daily FRED 3-month T-bill returns (used as the risk-free rate in metrics)."""
