@@ -165,6 +165,8 @@ class DataStore:
             "industries_10": french_mod.industry_returns,
             "industries_12": french_mod.industry_returns,
             "factors": french_mod.factor_returns,
+            "industries_10_daily": french_mod.industry_returns_daily,
+            "factors_daily": french_mod.factor_returns_daily,
         }
         for key, parse in parsers.items():
             if not refresh and self.cache.is_fresh(NS_FRENCH, key, self.cfg["cache_max_age_days"] * 30):
@@ -254,3 +256,9 @@ class DataStore:
         df = self.cache.read(NS_FRENCH, "factors")
         df.attrs["label"] = french_mod.LABEL
         return clip_heldout(df, self.settings)
+
+    def french_daily(self, key: str, include_heldout: bool | None = None) -> pd.DataFrame:
+        """Daily French table (``industries_10_daily`` or ``factors_daily``), decimal returns."""
+        df = self.cache.read(NS_FRENCH, key)
+        df.attrs["label"] = french_mod.LABEL
+        return clip_heldout(df, self.settings, include_heldout)

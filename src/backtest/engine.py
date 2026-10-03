@@ -128,7 +128,9 @@ def _validate_weights(weights: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFra
     missing = [c for c in weights.columns if c not in prices.columns]
     if missing:
         raise ValueError(f"No prices for symbols {missing}")
-    w = weights.fillna(0.0).astype(float)
+    w = weights.sort_index().fillna(0.0).astype(float)
+    if w.index.has_duplicates:
+        raise ValueError("Duplicate signal dates in weights")
     if (w < -1e-12).to_numpy().any():
         raise ValueError("Negative weights are not allowed (long-only)")
     sums = w.sum(axis=1)

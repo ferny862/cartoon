@@ -24,6 +24,7 @@ import requests
 log = logging.getLogger(__name__)
 
 LABEL = "GROSS, NON-INVESTABLE (Kenneth French Data Library)"
+_DAILY = re.compile(r"^\d{8}$")
 _MONTHLY = re.compile(r"^\d{6}$")
 _ANNUAL = re.compile(r"^\d{4}$")
 _MISSING = (-99.99, -999.0)
@@ -33,8 +34,9 @@ def parse_french_csv(text: str) -> dict[str, pd.DataFrame]:
     """Split a French-library CSV into tables keyed by their title line.
 
     Values are converted from percent to decimal. Missing markers (-99.99,
-    -999) become NaN. Monthly tables are indexed by month-end dates; annual
-    tables by year-end dates. Each frame carries ``attrs['label']``.
+    -999) become NaN. Daily tables are indexed by trading date, monthly
+    tables by month-end dates, annual tables by year-end dates. Each frame
+    carries ``attrs['label']``.
     """
     lines = text.splitlines()
     tables: dict[str, pd.DataFrame] = {}
@@ -48,7 +50,7 @@ def parse_french_csv(text: str) -> dict[str, pd.DataFrame]:
             j = i + 1
             while j < len(lines):
                 parts = [p.strip() for p in lines[j].split(",")]
-                if not parts or not (_MONTHLY.match(parts[0]) or _ANNUAL.match(parts[0])):
+                if not parts or not (_DAILY.match(parts[0]) or _MONTHLY.match(parts[0]) or _ANNUAL.match(parts[0])):
                     break
                 vals = [float(p) if p else np.nan for p in parts[1 : 1 + len(header)]]
                 rows.append((parts[0], vals))
@@ -70,7 +72,9 @@ def parse_french_csv(text: str) -> dict[str, pd.DataFrame]:
 
 def _to_frame(rows: list[tuple[str, list[float]]], header: list[str]) -> pd.DataFrame:
     stamps = [r[0] for r in rows]
-    if len(stamps[0]) == 6:
+    if len(stamps[0]) == 8:
+        index = pd.to_datetime(stamps, format="%Y%m%d")
+    elif len(stamps[0]) == 6:
         index = pd.to_datetime(stamps, format="%Y%m") + pd.offsets.MonthEnd(0)
     else:
         index = pd.to_datetime(stamps, format="%Y") + pd.offsets.YearEnd(0)
@@ -83,13 +87,35 @@ def _to_frame(rows: list[tuple[str, list[float]]], header: list[str]) -> pd.Data
 def select_monthly_table(tables: dict[str, pd.DataFrame], contains: str | None = None) -> pd.DataFrame:
     """Pick the first monthly table, optionally one whose title contains ``contains``."""
     for title, df in tables.items():
-        is_monthly = len(df) > 1 and (df.index[1] - df.index[0]).days < 40
+        is_monthly = len(df) > 1 and 20 < (df.index[1] - df.index[0]).days < 40
         if is_monthly and (contains is None or contains.lower() in title.lower()):
             out = df.copy()
             out.attrs["label"] = LABEL
             out.attrs["table"] = title
             return out
     raise KeyError(f"No monthly table matching {contains!r}; tables: {list(tables)}")
+
+
+def select_daily_table(tables: dict[str, pd.DataFrame], contains: str | None = None) -> pd.DataFrame:
+    """Pick the first daily table, optionally one whose title contains ``contains``."""
+    for title, df in tables.items():
+        is_daily = len(df) > 1 and (df.index[1] - df.index[0]).days <= 5
+        if is_daily and (contains is None or contains.lower() in title.lower()):
+            out = df.copy()
+            out.attrs["label"] = LABEL
+            out.attrs["table"] = title
+            return out
+    raise KeyError(f"No daily table matching {contains!r}; tables: {list(tables)}")
+
+
+def industry_returns_daily(text: str) -> pd.DataFrame:
+    """Daily value-weighted industry returns from a daily industry-portfolio CSV."""
+    return select_daily_table(parse_french_csv(text), "Value Weighted Returns -- Daily")
+
+
+def factor_returns_daily(text: str) -> pd.DataFrame:
+    """Daily Fama-French factors (Mkt-RF, SMB, HML, RF)."""
+    return select_daily_table(parse_french_csv(text))
 
 
 def industry_returns(text: str) -> pd.DataFrame:

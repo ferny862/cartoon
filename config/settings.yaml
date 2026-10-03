@@ -112,6 +112,8 @@ data:
     industries_10: 10_Industry_Portfolios
     industries_12: 12_Industry_Portfolios
     factors: F-F_Research_Data_Factors
+    industries_10_daily: 10_Industry_Portfolios_daily   # used for the sector-strategy sanity checks
+    factors_daily: F-F_Research_Data_Factors_daily      # daily RF (cash) and market return
     timeout_seconds: 60
   validation:
     extreme_move_threshold: 0.20    # |daily return| above this is flagged for review
@@ -128,6 +130,7 @@ data:
 execution:
   rebalance_frequency: monthly
   signal_time: month_end_close      # signals use the last trading day's close
+  signal_prices: total_return       # SMAs and momentum use dividend-adjusted closes (approved 2026-10-03)
   execution_lag_days: 1             # orders fill at the close this many trading days later
   allow_fractional_shares: true     # backtest only; paper trading uses whole shares by default
 
@@ -194,7 +197,8 @@ strategies:
     module: factor_blend
     assets: [QUAL, MTUM, VLUE, USMV]
     rebalance: annual
-    drift_threshold: 0.05           # absolute weight drift that triggers a rebalance
+    rebalance_month: 12             # December month-end (approved 2026-10-03)
+    drift_threshold: 0.05           # absolute weight drift checked at every month-end
     note: "Factor ETFs mostly start in 2013; much shorter history."
   sector_mom_sector_filter:
     module: sector_momentum
@@ -215,6 +219,18 @@ strategies:
     market: SPY
     sma_months: 10
     cash: BIL
+
+# Long-history sanity check of strategies 5 and 6 on Kenneth French daily
+# 10-industry portfolios (GROSS, NON-INVESTABLE). Same rules as the ETF
+# versions: cash = French RF, market filter = French market (Mkt-RF + RF),
+# signals at month-end, fills at the next day's close, no costs or taxes.
+french_sanity:
+  industries: 10
+  frequency: daily
+  strategies: [sector_mom_sector_filter, sector_mom_market_filter]
+  cash_symbol: RF
+  market_symbol: MKT
+  cost_bps: 0
 
 # -----------------------------------------------------------------------------
 # Validation (used from step 4 onward)

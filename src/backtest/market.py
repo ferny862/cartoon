@@ -65,3 +65,40 @@ def build_market_data(store: DataStore, symbols: list[str], include_heldout: boo
         tax_character=characters,
         notes=notes,
     )
+
+
+def french_market_data(industries: pd.DataFrame, factors: pd.DataFrame,
+                       cash_symbol: str = "RF", market_symbol: str = "MKT") -> MarketData:
+    """MarketData for the long-history sanity check from French daily returns.
+
+    Each industry becomes a total-return index; ``market_symbol`` is the
+    French market (Mkt-RF + RF) and ``cash_symbol`` compounds the French
+    risk-free rate. All series are GROSS and NON-INVESTABLE.
+    """
+    common = industries.index.intersection(factors.index)
+    ind = industries.loc[common]
+    fac = factors.loc[common]
+    rets = ind.copy()
+    rets[market_symbol] = fac["Mkt-RF"] + fac["RF"]
+    rets[cash_symbol] = fac["RF"]
+    prices = (1.0 + rets).cumprod()
+    note = "GROSS, NON-INVESTABLE Kenneth French daily portfolios; no fees, costs or taxes"
+    return MarketData(
+        prices=prices,
+        risk_free=fac["RF"].rename("risk_free"),
+        div_yield=None,
+        raw_close=None,
+        tax_character={},
+        notes={"universe": note},
+    )
+
+
+def build_french_market_data(store: DataStore, include_heldout: bool | None = None) -> MarketData:
+    cfg = store.settings["french_sanity"]
+    if cfg.get("industries", 10) != 10 or cfg.get("frequency", "daily") != "daily":
+        raise ValueError("Only the daily 10-industry French data is configured")
+    return french_market_data(
+        store.french_daily("industries_10_daily", include_heldout),
+        store.french_daily("factors_daily", include_heldout),
+        cfg["cash_symbol"], cfg["market_symbol"],
+    )

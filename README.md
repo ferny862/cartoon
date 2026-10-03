@@ -18,7 +18,7 @@ real-money trades.**
 |---|---|---|
 | 1 | Data layer: downloaders, cache, validation | **done** |
 | 2 | Backtest engine, cost model, tax-lot model, metrics | **done** |
-| 3 | Strategies 0-6 | not started |
+| 3 | Strategies 0-6, runner, trial log, French sanity check | **done** |
 | 4 | Walk-forward, Deflated Sharpe, PBO, bootstrap | not started |
 | 5 | Charts and report | not started |
 | 6 | Alpaca paper trading (paper endpoint only) | not started |
@@ -73,9 +73,18 @@ python -m src.data download --symbols SPY XLK --refresh
 # Data-quality checks; writes logs/data_validation_<date>.md and .csv
 python -m src.data validate
 
+# Backtests (in-sample only until the held-out period is unlocked)
+python -m src.backtest run                                   # all strategies, 5 bp, with taxes
+python -m src.backtest run --strategies gem --cost-bps 2 5 10
+python -m src.backtest french                                # strategies 5-6 on French industries
+
 # Tests (all network calls are mocked; real network access is blocked)
 pytest
 ```
+
+Every backtest run is appended to `logs/trials.jsonl`. A new set of strategy
+parameters counts as a new trial for the overfitting statistics. Re-running
+the same parameters with different costs or account types does not.
 
 The full enabled universe is 23 symbols, which is well within Tiingo's free tier
 (about 500 unique symbols per month, 50 requests per hour, 1,000 per day).
@@ -90,7 +99,7 @@ src/config.py          settings + secret loading, redaction
 src/logging_setup.py   logging with secret masking
 src/data/              Tiingo, yfinance, FRED, French downloaders; Parquet cache;
                        validation; DataStore (inception masking, held-out lock)
-src/strategies/        (step 3) one module per strategy -> target weights
+src/strategies/        one module per strategy -> target weights per signal date
 src/backtest/          engine, cost model, tax lots, metrics, MarketData builder
 src/validation/        (step 4) walk-forward, Deflated Sharpe, PBO, bootstrap
 src/reporting/         (step 5) charts and report
@@ -120,6 +129,42 @@ notebooks/             optional; no untested logic allowed here
   first-date versus inception mismatches, and Tiingo versus yfinance
   disagreements in daily and monthly adjusted returns. Checks only flag
   problems for review. They never change data.
+
+## Strategies as implemented
+
+All signals are computed at the last trading day's close of each month,
+using total-return (dividend-adjusted) closes, and filled at the next
+trading day's close. Each strategy only ever sees month-end closes up to the
+signal date; the base class enforces this by truncating the history. A test
+changes future prices for every strategy and checks that past signals don't
+move. "Above the SMA" means strictly above the simple moving average of the
+last 10 month-end closes, including the current one. Cash is BIL, or the
+FRED T-bill series before BIL existed.
+
+| # | Name | Rule |
+|---|---|---|
+| 0 | `benchmark` | Buy SPY once and hold it, dividends reinvested. |
+| 1 | `trend_faber` | 100% SPY if SPY is above its 10-month SMA, else 100% cash. |
+| 2 | `gem` | If SPY's 12-month return beats T-bills' 12-month return, hold the stronger of SPY and EFA over 12 months; otherwise hold AGG. |
+| 3 | `gtaa5` | 20% each in SPY, EFA, IEF, VNQ, DBC; a sleeve goes to cash when its fund is not above its 10-month SMA. |
+| 4 | `factor_blend` | 25% each in QUAL, MTUM, VLUE, USMV. Rebalance at each December month-end, or at any month-end when a weight has drifted more than 5 percentage points. |
+| 5 | `sector_mom_sector_filter` | Rank the 9 original sector SPDRs by 12-1 momentum and hold the top 3 at one-third each. A held sector that is not above its own 10-month SMA has its third moved to cash. |
+| 6 | `sector_mom_market_filter` | Same ranking and top 3, but everything moves to cash when SPY is not above its 10-month SMA. |
+
+* **12-1 momentum** here is the return from 14 month-ends ago to last
+  month-end, `P[t-1] / P[t-13] - 1`: 12 monthly returns, skipping the most
+  recent month. Some academic papers use 11 returns (`P[t-1] / P[t-12]`);
+  that would be a parameter change requiring approval.
+* **Ties in the sector ranking** are broken by the order sectors are listed
+  in the config.
+* **Factor-blend drift** is measured from month-end closes since the last
+  rebalance signal. Actual fills happen one day later, so the engine's
+  drift can differ slightly.
+* **Long-history sanity check.** Strategies 5 and 6 are also run with the
+  same rules on Kenneth French's daily 10-industry portfolios from 1926, using
+  French's risk-free rate as cash and French's market return for the market
+  filter. These runs have no costs or taxes, and the results are **gross and
+  non-investable**. They choose the top 3 of 10 industries, not 9 sectors.
 
 ## How the backtest engine works
 
@@ -172,12 +217,16 @@ notebooks/             optional; no untested logic allowed here
   re-bases adjusted history whenever a dividend is paid, so the cache always
   re-downloads full history instead of appending.
 * **Short histories.** Strategies are tested only from the point where every
-  ETF they need exists and the lookback period is filled:
-  * Sector strategies start around late 1999. The sector ETFs launched in
-    December 1998, so the start just covers the 2000–2002 bear market.
-  * GEM starts around late 2004, because EFA and AGG need 12 months of history.
-  * GTAA starts around early 2007, because of DBC plus a 10-month moving average.
-  * The factor blend starts around 2014.
+  ETF they need exists and the lookback period is filled. These are the
+  first signal dates; trading starts the next day:
+  * Sector strategies: January 2000. The sector ETFs launched in December
+    1998, and 12-1 momentum needs 14 month-end closes, so the start just
+    covers the 2000–2002 bear market.
+  * GEM: September 2003. EFA has 12 months of history by 2002, and AGG,
+    the defensive holding, only needs to exist (it launched September 2003).
+  * GTAA: November 2006, when DBC (launched February 2006) has 10 month-end
+    closes for its moving average.
+  * Factor blend: July 2013, when QUAL launched.
 
   **GEM, GTAA and the factor blend therefore miss the 2000–2002 bear market
   entirely, and the factor blend also misses 2008–2009.**
