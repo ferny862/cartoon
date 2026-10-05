@@ -37,9 +37,29 @@ TIINGO_ROWS = [
 ]
 
 
-def test_tiingo_requires_key():
+def test_tiingo_env_mode_requires_key():
     with pytest.raises(MissingSecretError):
-        TiingoClient(session=FakeSession(FakeResponse([])))
+        TiingoClient(session=FakeSession(FakeResponse([])), credential="env")
+
+
+def test_tiingo_auto_without_key_uses_proxy_injection():
+    sess = FakeSession(FakeResponse(TIINGO_ROWS))
+    client = TiingoClient(session=sess)                      # auto, and no TIINGO_API_KEY set
+    assert client.credential_mode == "proxy"
+    client.get_daily_prices("SPY")
+    call = sess.calls[0]
+    assert "Authorization" not in call["headers"] and "token" not in call["params"]
+
+
+def test_tiingo_proxy_auth_failure_explains_setup():
+    resp = FakeResponse(None, status=401, text="Please supply a token")
+    with pytest.raises(TiingoError, match="query parameter named 'token'"):
+        TiingoClient(session=FakeSession(resp), credential="proxy").get_daily_prices("SPY")
+
+
+def test_tiingo_rejects_unknown_credential_mode():
+    with pytest.raises(ValueError):
+        TiingoClient(api_key=KEY, credential="bogus")
 
 
 def test_tiingo_reads_key_from_env(monkeypatch):

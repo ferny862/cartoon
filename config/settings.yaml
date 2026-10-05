@@ -97,6 +97,8 @@ data:
   crosscheck: yfinance
   tiingo:
     base_url: "https://api.tiingo.com"
+    credential: auto                # env = TIINGO_API_KEY; proxy = key injected by the cloud
+                                    # environment's proxy; auto = env if set, else proxy
     max_requests_per_hour: 50
     max_requests_per_day: 1000
     max_unique_symbols_per_month: 500

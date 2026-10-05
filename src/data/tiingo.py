@@ -1,7 +1,12 @@
 """Tiingo end-of-day price client (primary source).
 
-* The API key is read from TIINGO_API_KEY and sent in the Authorization
-  header, never in the URL, so it cannot leak through logged URLs.
+* Credentials come from one of two places (``data.tiingo.credential``):
+  - ``env``: TIINGO_API_KEY, sent in the Authorization header (never in the
+    URL, so it cannot leak through logged URLs);
+  - ``proxy``: the key is injected into each request by the environment's
+    network proxy (a credential configured in the cloud environment), so it
+    never reaches this process and the client sends no key itself;
+  - ``auto`` (default): ``env`` if TIINGO_API_KEY is set, else ``proxy``.
 * Requests go through a persistent RateLimiter and SymbolBudget sized to the
   free tier.
 * Tiingo's adjusted closes are re-based whenever a new dividend is paid, so a
@@ -17,7 +22,7 @@ from typing import Any
 import pandas as pd
 import requests
 
-from src.config import get_secret, redact
+from src.config import MissingSecretError, get_secret, redact
 from src.data.ratelimit import RateLimiter, SymbolBudget
 from src.data.schema import normalize_price_frame
 
@@ -45,8 +50,24 @@ class TiingoClient:
         limiter: RateLimiter | None = None,
         symbol_budget: SymbolBudget | None = None,
         timeout: float = 30.0,
+        credential: str = "auto",
     ):
-        self._api_key = api_key or get_secret("TIINGO_API_KEY")
+        if credential not in ("auto", "env", "proxy"):
+            raise ValueError("credential must be 'auto', 'env' or 'proxy'")
+        if api_key:
+            self._api_key = api_key
+        elif credential == "proxy":
+            self._api_key = None
+        else:
+            try:
+                self._api_key = get_secret("TIINGO_API_KEY")
+            except MissingSecretError:
+                if credential == "env":
+                    raise
+                self._api_key = None
+        self.credential_mode = "env" if self._api_key else "proxy"
+        if self.credential_mode == "proxy":
+            log.info("Tiingo: TIINGO_API_KEY not set; relying on the key injected by the network proxy")
         self.base_url = base_url.rstrip("/")
         self.session = session or requests.Session()
         self.limiter = limiter
@@ -70,6 +91,7 @@ class TiingoClient:
             limiter=limiter,
             symbol_budget=budget,
             timeout=cfg["timeout_seconds"],
+            credential=cfg.get("credential", "auto"),
             **kwargs,
         )
 
@@ -77,14 +99,21 @@ class TiingoClient:
         if self.limiter is not None:
             self.limiter.acquire()
         url = f"{self.base_url}{path}"
-        headers = {"Authorization": f"Token {self._api_key}", "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        if self._api_key:
+            headers["Authorization"] = f"Token {self._api_key}"
+        secrets = (self._api_key,) if self._api_key else ()
         try:
             resp = self.session.get(url, params=params or {}, headers=headers, timeout=self.timeout)
         except requests.RequestException as exc:
-            raise TiingoError(redact(f"Request to {path} failed: {exc}", (self._api_key,))) from None
+            raise TiingoError(redact(f"Request to {path} failed: {exc}", secrets)) from None
         if resp.status_code != 200:
-            body = redact(str(getattr(resp, "text", ""))[:200], (self._api_key,))
-            raise TiingoError(f"Tiingo returned HTTP {resp.status_code} for {path}: {body}")
+            body = redact(str(getattr(resp, "text", ""))[:200], secrets)
+            hint = ""
+            if resp.status_code in (401, 403) and self.credential_mode == "proxy":
+                hint = (" No TIINGO_API_KEY is set, so the key must be injected by the environment: add an API "
+                        "credential for api.tiingo.com as a query parameter named 'token'.")
+            raise TiingoError(f"Tiingo returned HTTP {resp.status_code} for {path}: {body}{hint}")
         return resp.json()
 
     def get_metadata(self, symbol: str) -> dict[str, Any]:
