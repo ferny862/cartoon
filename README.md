@@ -57,13 +57,15 @@ Get a free Tiingo API token at <https://www.tiingo.com> (Account > API).
 
 **In a Claude Code cloud environment**, store the token as an environment API
 credential instead of in `.env`:
-* Credential type: **Query parameter**
+* Credential type: **Bearer**
 * Allowed website: `api.tiingo.com`
-* Parameter name: `token`, with your Tiingo key as the value
+* Header name `Authorization`, with the prefix changed from `Bearer` to
+  **`Token`**, and your Tiingo key as the value. The resolved request should
+  carry `Authorization: Token <key>`, which is the form Tiingo expects.
 
 The proxy then adds the key to every Tiingo request, and the key never
-reaches the session. With no `TIINGO_API_KEY` set, the client relies on that
-injected key automatically (`data.tiingo.credential: auto`).
+reaches the session. With no `TIINGO_API_KEY` set, the client sends no key of its own and relies on
+the injected header automatically (`data.tiingo.credential: auto`).
 FRED and the Kenneth French library need no key.
 
 Secrets are read only from environment variables (or a local `.env`, which is

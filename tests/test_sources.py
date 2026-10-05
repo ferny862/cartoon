@@ -53,7 +53,7 @@ def test_tiingo_auto_without_key_uses_proxy_injection():
 
 def test_tiingo_proxy_auth_failure_explains_setup():
     resp = FakeResponse(None, status=401, text="Please supply a token")
-    with pytest.raises(TiingoError, match="query parameter named 'token'"):
+    with pytest.raises(TiingoError, match="Authorization: Token <key>"):
         TiingoClient(session=FakeSession(resp), credential="proxy").get_daily_prices("SPY")
 
 

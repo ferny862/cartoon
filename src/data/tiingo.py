@@ -112,7 +112,8 @@ class TiingoClient:
             hint = ""
             if resp.status_code in (401, 403) and self.credential_mode == "proxy":
                 hint = (" No TIINGO_API_KEY is set, so the key must be injected by the environment: add an API "
-                        "credential for api.tiingo.com as a query parameter named 'token'.")
+                        "credential for api.tiingo.com that sends the header 'Authorization: Token <key>' "
+                        "(Bearer type with the prefix changed to 'Token').")
             raise TiingoError(f"Tiingo returned HTTP {resp.status_code} for {path}: {body}{hint}")
         return resp.json()
 
