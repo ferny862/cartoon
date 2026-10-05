@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ETF Strategy Report</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --hairline: #e1e0d9; --axis: #c3c2b7; --banner: #fff4dc; --banner-ink: #5a3d00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --hairline: #2c2c2a; --axis: #383835; --banner: #2e2410; --banner-ink: #f4d58d;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --hairline: #2c2c2a; --axis: #383835; --banner: #2e2410; --banner-ink: #f4d58d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.25rem; margin: 40px 0 8px; padding-top: 8px; border-top: 1px solid var(--hairline); }
+h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+p, li { color: var(--ink-2); max-width: 75ch; }
+.meta { color: var(--muted); font-size: 0.9rem; margin: 0 0 16px; }
+.banner { background: var(--banner); color: var(--banner-ink); border-radius: 8px; padding: 12px 16px; margin: 16px 0; }
+.banner strong { color: inherit; }
+.verdict { background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 8px 20px; }
+.verdict p { color: var(--ink); }
+nav ul { columns: 2; padding-left: 18px; margin: 8px 0; }
+nav a { color: var(--ink-2); }
+.table-wrap { overflow-x: auto; margin: 8px 0 16px; background: var(--surface);
+  border: 1px solid var(--hairline); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+caption { text-align: left; padding: 8px 10px; color: var(--muted); }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; background: var(--surface); position: sticky; top: 0; }
+td { color: var(--ink); }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: none; }
+figure { margin: 12px 0 20px; background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: 8px; padding: 8px; }
+figure img { width: 100%; height: auto; display: block; }
+figcaption { color: var(--muted); font-size: 0.85rem; padding: 6px 4px 0; }
+code { font-size: 0.9em; }
+</style>
+</head>
+<body>
+<main>
+<h1>ETF strategy research report</h1>
+<p class="meta">Generated {{ d.generated }} · Data {{ d.data_start }} to {{ d.data_end }} · Starting capital ${{ "{:,.0f}".format(d.settings.project.starting_capital) }}</p>
+
+{% if d.in_sample %}
+<div class="banner"><strong>In-sample results only.</strong> Data on or after {{ heldout_start }} is held out and has not been looked at. These numbers are what the strategies were developed against, so they are the most flattering view; only the held-out period can confirm them.</div>
+{% else %}
+<div class="banner"><strong>This report includes the held-out period</strong> (from {{ heldout_start }}). The held-out set has now been spent; see <code>docs/heldout_log.md</code>.</div>
+{% endif %}
+
+<h2 id="read-first">Read this first</h2>
+<ul>
+  <li>Past results do not predict future results. A backtest is a measurement under assumptions, not a forecast.</li>
+  <li>Every strategy is compared with SPY bought on the same day the strategy started, with dividends reinvested, so each comparison covers an identical period.</li>
+  <li>Costs: {{ costs.spread_slippage_bps }} bp per side for spread and slippage, plus SEC and FINRA fees on sales. Taxes use illustrative flat rates (federal {{ "{:.0%}".format(taxes.federal.short_term) }} short-term / {{ "{:.0%}".format(taxes.federal.long_term) }} long-term, state {{ "{:.0%}".format(taxes.state.rate) }}), not your actual brackets.</li>
+  {% for sym, note in d.notes.items() %}<li>{{ sym }}: {{ note }}.</li>{% endfor %}
+  <li>The verdict rules at the end were written down before any real results were seen.</li>
+</ul>
+
+<nav><ul>
+  <li><a href="#headline">Headline results</a></li><li><a href="#charts">Charts</a></li>
+  <li><a href="#accounts">Accounts and taxes</a></li><li><a href="#costs">Cost sensitivity</a></li>
+  <li><a href="#periods">Results by period</a></li><li><a href="#downturns">Downturns</a></li>
+  <li><a href="#overfitting">Overfitting checks</a></li><li><a href="#french">Long-history check</a></li>
+  <li><a href="#verdict">Verdict</a></li><li><a href="#limits">Limitations</a></li>
+</ul></nav>
+
+<h2 id="headline">Headline results</h2>
+<p>Pre-tax results, which also apply to a Roth IRA. "SPY" columns are SPY over the same dates as that row's strategy. The Deflated Sharpe Ratio is the probability that the strategy's true Sharpe ratio beats the best result luck alone would produce from {{ d.validation.n_trials }} configurations. PBO is the probability that picking the best backtest here picks an overfit strategy.</p>
+{{ headline | safe }}
+
+<h2 id="charts">Charts</h2>
+{% macro chart(key, alt, caption) -%}
+{% if key in d.charts %}
+<figure>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="data:image/png;base64,{{ d.charts[key].dark }}">
+    <img src="data:image/png;base64,{{ d.charts[key].light }}" alt="{{ alt }}">
+  </picture>
+  <figcaption>{{ caption }}</figcaption>
+</figure>
+{% endif %}
+{%- endmacro %}
+{{ chart("equity", "Growth of one dollar for each strategy and SPY, log scale", "Growth of $1 on a log scale: each panel is one strategy against SPY over the same dates. Values are in the headline table.") }}
+{{ chart("drawdowns", "Drawdowns of each strategy and SPY", "Decline from the previous peak. Shallower is better. Maximum drawdowns are in the headline table.") }}
+{{ chart("rolling_excess", "Rolling three-year excess return versus SPY", "Annualized 3-year return minus SPY's. Above zero means the strategy was ahead over the previous three years.") }}
+{{ chart("annual_returns", "Calendar-year returns of each strategy and SPY", "Full calendar years only. Best and worst years are in the headline table.") }}
+{{ chart("allocation", "Monthly average portfolio weights for each strategy", "Darker means a larger weight. BIL before mid-2007 is the FRED T-bill rate.") }}
+
+<h2 id="accounts">Accounts and taxes</h2>
+<p>CAGR by account type. A traditional IRA applies a {{ "{:.0%}".format(taxes.traditional_ira_withdrawal_rate) }} tax on withdrawal of the ending value. The taxable account tracks every tax lot and pays each year's tax the following April by selling holdings. "Liquidated" also sells everything at the end and pays the resulting tax. Wash-sale flags mark losses whose deduction could be disallowed; they are not adjusted for, so flagged strategies look slightly better than they should after tax.</p>
+{{ accounts | safe }}
+<p>The sector-rotation strategies trade more often and realize mostly short-term gains, so they are better suited to an IRA than a taxable account.</p>
+
+<h2 id="costs">Cost sensitivity</h2>
+<p>Pre-tax results with the spread-plus-slippage cost per side set to each level.</p>
+{{ sensitivity | safe }}
+
+<h2 id="periods">Results by period</h2>
+<p>None of these strategies fits parameters to past data, so walk-forward testing here means checking whether results against SPY hold up in separate periods. "Partial" means the strategy started after the window began; it is then compared from its own start. "Not live" means it had not started.</p>
+<h3>Fixed windows</h3>
+{{ windows | safe }}
+<h3>Expanding windows</h3>
+{{ expanding | safe }}
+<h3>Market regimes</h3>
+{{ regimes | safe }}
+
+<h2 id="downturns">Downturns</h2>
+<p>Each downturn runs from SPY's peak to the day SPY regained that peak (or the end of the data). <strong>Avoided</strong> means the strategy fell at most {{ "{:.0%}".format(d.settings.report.downturn_labels.avoided_max_ratio) }} as far as SPY. <strong>Whipsawed</strong> means it moved to defensive assets and later bought back in while SPY was higher than when it sold. An exit or re-entry is a change in risk exposure of at least {{ "{:.0%}".format(d.settings.report.downturn_labels.exposure_change) }}.</p>
+{% for b in downturns %}
+<h3>{{ b.name }}</h3>
+{% if b.locked %}<p>{{ b.status | capitalize }}.</p>{% else %}
+<p>{{ b.spy }}</p>
+{{ b.table | safe }}
+<ul>{% for s in b.sentences %}<li>{{ s }}</li>{% endfor %}</ul>
+{% endif %}
+{% endfor %}
+
+<h2 id="overfitting">Overfitting checks</h2>
+<h3>Deflated Sharpe Ratio</h3>
+{{ dsr | safe }}
+<h3>Probability of Backtest Overfitting</h3>
+{{ pbo | safe }}
+<h3>Bootstrap ranges against SPY</h3>
+<p>A 12-month block bootstrap of monthly returns. If a 95% range includes zero, the difference cannot be told apart from luck.</p>
+{{ bootstrap | safe }}
+<h3>In plain English</h3>
+<ul>{% for e in d.validation.explanations %}<li>{{ e }}</li>{% endfor %}</ul>
+
+<h2 id="french">Long-history check (gross, non-investable)</h2>
+{% if french %}
+<p>Strategies 5 and 6 with identical rules on Kenneth French's daily 10-industry portfolios, using French's risk-free rate as cash and French's market return as the benchmark. These are <strong>gross, non-investable</strong> paper portfolios with no fees, costs or taxes, and they pick the top 3 of 10 industries rather than 9 sectors. They test whether the idea held up over a much longer history, not what an investor could have earned.</p>
+{{ french | safe }}
+{{ chart("french", "Growth of one dollar for the French-industry versions, log scale", "Gross, non-investable. Log scale.") }}
+{% else %}
+<p>French data was not downloaded, so this check was skipped.</p>
+{% endif %}
+
+<h2 id="verdict">Verdict</h2>
+<p>Rules written down before seeing real results. A strategy is <em>preferable to holding SPY</em> only if all of these hold: the bootstrap 95% range for its Sharpe advantage lies above {{ criteria.sharpe_ci_low_above }}; its Deflated Sharpe Ratio is at least {{ criteria.min_dsr }}; the main PBO is below {{ criteria.max_pbo_main }}; it had smaller drawdowns than SPY in most evaluated windows; and its CAGR is within {{ "{:.0%}".format(criteria.max_cagr_shortfall) }} a year of SPY's (after tax, liquidated, for the taxable verdict).</p>
+{{ verdict_checks | safe }}
+<div class="verdict">
+{% for p in d.verdict_paragraphs %}<p>{{ p }}</p>{% endfor %}
+</div>
+
+<h2 id="limits">Limitations</h2>
+<ul>
+  <li>Only free data: Tiingo adjusted prices, cross-checked against Yahoo. Vendors adjust for dividends slightly differently.</li>
+  <li>Short histories: GEM starts in 2003, GTAA in late 2006 and the factor blend in 2013, so they miss some or all of the 2000–02 and 2008–09 downturns.</li>
+  <li>Taxes are simplified: flat illustrative rates; all equity-fund dividends treated as qualified (subject to the holding test); REIT and bond distributions taxed as ordinary income; DBC's K-1 60/40 treatment not modeled; wash-sale disallowance not applied; unused loss carryforwards at the end given no value.</li>
+  <li>With only {{ d.validation.n_trials }} configurations and about 15–20 years of data, the overfitting statistics are noisy.</li>
+  <li>Costs are an estimate. Real spreads widen in stressed markets, exactly when the trend filters trade.</li>
+</ul>
+</main>
+</body>
+</html>

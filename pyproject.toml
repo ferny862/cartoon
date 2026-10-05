@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "etf-strategy-research"
+version = "0.1.0"
+description = "Backtests and paper-trades low-turnover, rules-based ETF strategies against SPY. Research only; no live trading."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas==3.0.6",
+    "numpy==2.4.6",
+    "scipy==1.17.1",
+    "pyarrow==25.0.1",
+    "PyYAML==6.0.3",
+    "requests==2.34.2",
+    "python-dotenv==1.2.4",
+    "matplotlib==3.11.2",
+    "Jinja2==3.1.6",
+]
+
+[project.optional-dependencies]
+crosscheck = ["yfinance==1.7.0"]
+paper = ["alpaca-py==0.44.0"]
+dev = ["pytest==9.1.1", "pytest-mock==3.16.0"]
+all = ["etf-strategy-research[crosscheck,paper,dev]"]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+"src.reporting" = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+filterwarnings = [
+    "error::FutureWarning",                                      # pandas deprecations fail the suite
+    "ignore:websockets.legacy is deprecated:DeprecationWarning", # third-party, from alpaca-py's dependency
+]
