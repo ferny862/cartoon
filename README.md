@@ -23,6 +23,22 @@ real-money trades.**
 | 5 | Charts, downturn analysis, pre-registered verdict, HTML/Markdown report | **done** |
 | 6 | Alpaca paper trading (paper endpoint only, dry run by default) | **done** |
 
+## Results so far
+
+* **In-sample (1993 to Sep 2021):** no strategy met the pre-registered bar.
+  The trend filter and sector momentum with a market filter roughly matched
+  SPY's return with much smaller crash losses, but the difference could not
+  be told apart from luck.
+* **Held-out test (Oct 2021 to Oct 2026, run once on 2026-10-05, see
+  `docs/heldout_log.md`):** both of those strategies returned about 6–7% a
+  year against SPY's 13.6%. Neither avoided the 2022 bear market; both were
+  whipsawed in it. The trend filter's shortfall is statistically clear.
+  **Conclusion: buy and hold an S&P 500 index fund.** The held-out set is
+  now spent; any later change is post-held-out and must be labeled that way.
+
+Reproduce with `python -m src.reporting` (in-sample, all strategies) and
+`python -m src.validation.heldout --strategies trend_faber sector_mom_market_filter`.
+
 ## Approved research decisions (2026-10-03)
 
 | Decision | Choice |

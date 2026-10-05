@@ -26,9 +26,20 @@ def _no_real_secrets(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+def locked_settings() -> dict:
+    """Project settings with the held-out period locked.
+
+    Tests exercise the lock itself, independent of whether the real project
+    has since unlocked it for its one-time held-out evaluation.
+    """
+    s = load_settings()
+    s["dates"] = {**s["dates"], "heldout_unlocked": False}
+    return s
+
+
 @pytest.fixture
 def settings():
-    return load_settings()
+    return locked_settings()
 
 
 def make_prices(
@@ -85,6 +96,7 @@ def build_synthetic_store(tmp_path, settings, start="1998-01-02", end="2022-12-3
     cache.write(NS_FRENCH, "industries_10_daily", ind)
     cache.write(NS_FRENCH, "factors_daily", fac)
     s = {**settings,
+         "dates": {**settings["dates"], "heldout_unlocked": False},
          "data": {**settings["data"], "cache_dir": str(tmp_path / "cache")},
          "project": {**settings["project"], "log_dir": str(tmp_path / "logs")},
          "validation": {**settings["validation"], "trial_log": str(tmp_path / "logs" / "trials.jsonl")}}

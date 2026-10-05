@@ -86,7 +86,10 @@ def _legend(ax, theme: dict, loc: str = "upper left") -> None:
 
 def _log_axis(ax) -> None:
     ax.set_yscale("log")
-    ax.yaxis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 5.0)))
+    lo, hi = ax.get_ylim()
+    # Narrow ranges (e.g. a 5-year held-out window) need finer ticks to be readable.
+    subs = (1.0, 2.0, 5.0) if hi / max(lo, 1e-9) > 4 else (1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0)
+    ax.yaxis.set_major_locator(LogLocator(base=10, subs=subs))
     ax.yaxis.set_major_formatter(TIMES)
     ax.yaxis.set_minor_formatter(NullFormatter())
 

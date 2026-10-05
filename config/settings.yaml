@@ -23,8 +23,9 @@ dates:
   data_start: "1993-01-01"          # earliest ETF data requested (SPY launched Jan 1993)
   end: null                         # null = latest available data
   heldout_start: "2021-10-01"       # last ~5 years are held out (approved 2026-10-03)
-  heldout_unlocked: false           # flip ONLY after the final configuration is approved;
-                                    # first evaluation must be recorded in docs/heldout_log.md
+  heldout_unlocked: true            # UNLOCKED 2026-10-05 06:33 UTC for the held-out test of trend_faber and
+                                    # sector_mom_market_filter; see docs/heldout_log.md. The held-out
+                                    # set is now spent: later changes are post-held-out.
 
 # Calendar-year regime windows (objective boundaries, not hindsight peaks).
 # The 2022 window lies inside the held-out period and stays hidden until unlocked.

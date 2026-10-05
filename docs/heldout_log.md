@@ -16,4 +16,4 @@ Rules:
 
 | Date (UTC) | Who approved | Configuration (commit hash) | Notes |
 |---|---|---|---|
-| _not yet evaluated_ | | | |
+| 2026-10-05 06:33 | ferny862 (in chat: "run the held-out test on trend filter and sector market filter") | ddd8876 | First and only evaluation. Strategies: `trend_faber` and `sector_mom_market_filter`, at published defaults, unchanged since in-sample. Benchmark: SPY bought the same day. Window: 2021-10-01 to the latest data (2026-10-02). The other five strategies are NOT evaluated on held-out data. Recorded before any held-out result was computed. |
