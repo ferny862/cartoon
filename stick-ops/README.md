@@ -20,9 +20,29 @@ keyboard and mouse; the mouse is captured when you deploy, and Esc releases it.
   - **Shipment:** a tiny container yard at sunset built for close-range chaos.
 - **Lobby size:** 6 v 6 (first to 75), 9 v 9 (first to 100) or 12 v 12 (first
   to 125).
-- **Loadouts:** M4A1 or MP5 with a red-dot sight, KAR98K with a scope, or the
-  Model 680 shotgun with iron sights, plus an X12 sidearm (iron sights) and
-  frag grenades you can cook.
+- **Weapons:** M4A1 and AK-47 (assault rifles), MP5 and Vector (SMGs), Model
+  680 (shotgun), KAR98K (sniper), PKM (LMG), SKS (marksman), plus the X12 and
+  .50 GS sidearms and frag grenades you can cook.
+- **Gunsmith and classes:** build three custom classes. Each gun takes five
+  attachments that change both its stats and its look:
+  - **Optic:** iron sights, red dot, holographic, 3x tactical; snipers get 8x
+    or 4x scopes.
+  - **Muzzle:** flash hider, compensator or suppressor (keeps you off enemy
+    radar).
+  - **Barrel:** short or long.
+  - **Underbarrel:** vertical grip, angled grip or tac laser.
+  - **Magazine:** fast or extended.
+
+  Add a camo (Woodland, Desert, Urban, Tiger, Gold, Diamond) and a perk
+  (Scavenger, Lightweight, Ghost, Quick Fix, Hardline). The Gunsmith shows a
+  3D preview and stat bars that turn green or red as you change parts.
+- **Leveling:** new guns, attachments, camos and perks unlock as you level up
+  (max level 30). The menu shows the next unlock, and level-ups during a match
+  announce what you just earned.
+- **Changing guns mid-match:** press B (or Esc) to pick another class. It
+  equips right away if you spawned in the last 10 seconds, otherwise on your
+  next spawn. Fallen soldiers drop their guns: press E to swap for one, or to
+  take ammo from the same gun.
 - **First-person feel:** aim down sights with field-of-view zoom, recoil, weapon
   bob and sway, tactical sprint, slide, crouch and jump.
 - **HUD:** rotating minimap with red pings when enemies fire, compass bar, team
@@ -52,6 +72,8 @@ keyboard and mouse; the mouse is captured when you deploy, and Esc releases it.
 | Q / mouse wheel | Swap weapon |
 | G (hold) | Cook and throw frag |
 | V / F | Melee |
+| E | Pick up a dropped weapon |
+| B | Change class |
 | 3 / 4 / 5 | UAV · Airstrike · Attack helo |
 | Tab | Scoreboard |
 | M | Mute |
