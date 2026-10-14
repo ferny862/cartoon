@@ -249,7 +249,7 @@ function buildNav(){
     else if(r.type==='solid'&&r.style!=='wall')surfaces.push({x1:r.x,x2:r.x+r.w,y:r.y,rect:r,oneWay:false});
   }
   surfaces.forEach((s,i)=>s.id=i);
-  const between=(x,yTop,yBot,A,B)=>surfaces.some(s=>s!==A&&s!==B&&s.y>yTop+2&&s.y<yBot-2&&x>s.x1&&x<s.x2);
+  const between=(x,yTop,yBot,A,B)=>surfaces.some(s=>s!==A&&s!==B&&s.y>yTop+2&&s.y<yBot-2&&x>s.x1-14&&x<s.x2+14);
   trans=surfaces.map(()=>[]);
   for(const A of surfaces)for(const B of surfaces){
     if(A===B)continue;
@@ -270,11 +270,22 @@ function buildNav(){
       if(!t){
         const probe=edge+d*30;
         if(probe>B.x1&&probe<B.x2&&!between(probe,A.y,B.y,A,B))t={a:'walkoff',x:edge,dir:d,land:clamp(edge+d*45,B.x1+15,B.x2-15)};
-        else{const gg=d>0?B.x1-edge:edge-B.x2;if(gg>0&&gg<=170&&-dy<=320)t={a:'jump',x:edge-d*12,dir:d,land:d>0?B.x1+40:B.x2-40};}
+        else{const gg=d>0?B.x1-edge:edge-B.x2,land=d>0?B.x1+40:B.x2-40;if(gg>0&&gg<=170&&-dy<=320&&!between(land,A.y,B.y,A,B))t={a:'jump',x:edge-d*12,dir:d,land};}
       }
     }
-    if(t){t.to=B.id;trans[A.id].push(t);}
+    if(t){t.to=B.id;if(t.a==='jump')t.v=jumpVel(A,B,t);trans[A.id].push(t);}
   }
+}
+// Smallest jump that clears the obstacle and covers the gap, so bots don't sail past
+// their target onto the floor above it.
+function jumpVel(A,B,t){
+  const up=Math.max(0,A.y-B.y);let obst=0;
+  if(t.dir!==0){const xa=Math.min(t.x,t.land)-12,xb=Math.max(t.x,t.land)+12;
+    for(const r of rects)if(r.type==='solid'&&r.style!=='wall'&&r.style!=='ground'&&r.x<xb&&r.x+r.w>xa&&r.y<A.y)obst=Math.max(obst,A.y-r.y);}
+  let v=Math.sqrt(2*GRAV*(Math.max(up,obst)+40));
+  if(t.dir!==0){const D=Math.abs(t.land-t.x),down=B.y-A.y;
+    for(;v<JUMP_V;v+=15){const h=v*v/(2*GRAV);if(330*(v/GRAV+Math.sqrt(2*Math.max(0,h+down)/GRAV))>=D*1.1)break;}}
+  return Math.min(v,JUMP_V);
 }
 function bfs(a,b){
   const prev=new Array(surfaces.length).fill(-1);const q=[a];prev[a]=a;
@@ -397,7 +408,7 @@ function makeChar(team,name,isPlayer,weaponId){
     weaponId,weapons:null,wi:0,grenades:2,fireCd:0,reloadT:0,reloadMax:1,swapT:0,meleeT:0,throwT:0,sprintOut:0,adsT:0,bloom:0,recoil:0,kick:0,
     sprinting:false,crouch:false,slideT:0,slideDir:1,walkPhase:Math.random()*6,dropRect:null,dropUntil:0,hitFlash:0,lastHurt:-99,lastShot:-99,
     damagers:{},lastKiller:null,in:{},pose:null,stepT:0,cookStart:-1,ai:isPlayer?null:{thinkT:Math.random()*0.2,target:null,react:0,focus:0,err:0,errT:0,
-      strafeDir:0,strafeT:0,burstT:0,pauseT:0,semiT:0,nadeT:rand(5,12),goal:null,goalExpire:0,path:null,pathFor:-1,pi:0,airX:null,lastX:0,stuckT:0,alert:null,visible:false,sprintPref:Math.random()<0.7}};
+      strafeDir:0,strafeT:0,pushUntil:0,burstT:0,pauseT:0,semiT:0,nadeT:rand(5,12),goal:null,goalExpire:0,path:null,pathFor:-1,pi:0,airX:null,lastX:0,stuckT:0,alert:null,visible:false,sprintPref:Math.random()<0.7}};
   c.weapons=[{def:WEAPONS[weaponId],mag:0,reserve:0},{def:WEAPONS.x12,mag:0,reserve:0}];
   computePose(c);
   return c;
@@ -522,6 +533,7 @@ cv.addEventListener('mousedown',e=>{if(e.button===0){mouse.l=true;mouse.lEdge=tr
 window.addEventListener('mouseup',e=>{if(e.button===0)mouse.l=false;if(e.button===2)mouse.r=false;});
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 cv.addEventListener('wheel',e=>{mouse.wheel+=Math.sign(e.deltaY);e.preventDefault();},{passive:false});
+function onScreen(wx,wy,inset){const s=worldToScreen(wx,wy);return s.x>inset&&s.x<SW-inset&&s.y>inset&&s.y<SH-inset;}
 function screenToWorld(sx,sy){return{x:(sx-SW/2)/cam.z+cam.x,y:(sy-SH/2)/cam.z+cam.y};}
 function worldToScreen(wx,wy){return{x:(wx-cam.x)*cam.z+SW/2,y:(wy-cam.y)*cam.z+SH/2};}
 
@@ -580,7 +592,7 @@ function actChar(c,dt){
   if(c.slideT>0)c.vx*=Math.exp(-1.7*dt);
   else c.vx=approach(c.vx,I.move*maxS,(c.onGround?2700:1400)*dt);
   if(I.drop&&c.onGround&&c.groundRect&&c.groundRect.type==='plat'){c.dropRect=c.groundRect;c.dropUntil=now+0.3;c.onGround=false;c.y+=2;}
-  else if(I.jump&&c.onGround){c.vy=-JUMP_V;c.onGround=false;if(c.slideT>0){c.slideT=0;c.vx*=1.05;}}
+  else if(I.jump&&c.onGround){c.vy=-(I.jumpV||JUMP_V);c.onGround=false;if(c.slideT>0){c.slideT=0;c.vx*=1.05;}}
   c.h=c.slideT>0?40:c.crouch?56:74;
   c.walkPhase+=Math.abs(c.vx)*dt*(c.sprinting?0.048:0.062);
   if(c.isPlayer&&c.onGround&&Math.abs(c.vx)>60){c.stepT-=dt*Math.abs(c.vx)/250;if(c.stepT<=0){c.stepT=0.42;sfx('step',0,0,true);}}
@@ -801,7 +813,7 @@ function callAirstrike(c,tx){
 }
 function callHeli(c){
   const fromLeft=c.team===0;
-  G.helis.push({team:c.team,owner:c,x:fromLeft?-200:WORLD_W+200,y:640,vx:0,tx:WORLD_W/2,hp:900,life:40,fireCd:0,burst:0,pause:1,retarget:0,rot:0,rotorT:0,tilt:0,target:null});
+  G.helis.push({team:c.team,owner:c,x:fromLeft?-200:WORLD_W+200,y:730,vx:0,tx:WORLD_W/2,hp:900,life:40,fireCd:0,burst:0,pause:1,retarget:0,rot:0,rotorT:0,tilt:0,target:null});
   if(G.player){if(c.team===G.player.team){say('Attack helicopter inbound');banner('Attack helo inbound',COL.ally);}else{say('Enemy attack helicopter');banner('Enemy attack helo',COL.hostile);}}
 }
 function banner(text,col){G.announce.unshift({text,col,t:0});if(G.announce.length>3)G.announce.pop();}
@@ -836,9 +848,9 @@ function updateStreakVehicles(dt){
     h.retarget-=dt;
     if(h.retarget<=0){h.retarget=4;const es=G.chars.filter(e=>e.alive&&e.team!==h.team);h.tx=es.length?clamp(pick(es).x,300,WORLD_W-300):WORLD_W/2;}
     h.vx=approach(h.vx,clamp((h.tx-h.x)*0.8,-260,260),300*dt);h.x+=h.vx*dt;h.tilt=h.vx/900;
-    h.y=640+Math.sin(now*1.3)*14;
+    h.y=730+Math.sin(now*1.3)*14;
     let best=null,bd=1300;
-    for(const e of G.chars){if(!e.alive||e.team===h.team)continue;const d=Math.hypot(e.x-h.x,e.y-40-h.y);if(d<bd&&los(h.x,h.y+22,e.x,e.y-40)){bd=d;best=e;}}
+    for(const e of G.chars){if(!e.alive||e.team===h.team||(e.isPlayer&&!onScreen(h.x,h.y,20)))continue;const d=Math.hypot(e.x-h.x,e.y-40-h.y);if(d<bd&&los(h.x,h.y+22,e.x,e.y-40)){bd=d;best=e;}}
     h.target=best;h.fireCd-=dt;
     if(best){
       if(h.burst>0){if(h.fireCd<=0){h.fireCd=0.085;h.burst--;const a=Math.atan2(best.y-40-(h.y+22),best.x-h.x)+randn()*0.035;
@@ -857,6 +869,7 @@ function botThink(b){
   for(const e of G.chars){
     if(!e.alive||e.team===b.team)continue;
     const d=Math.hypot(e.x-b.x,e.y-b.y);if(d>sight)continue;
+    if(e.isPlayer&&!onScreen(b.pose.head.x,b.pose.head.y,40))continue;
     if(!los(P.sh.x,P.sh.y,e.x,e.y-e.h*0.55)&&!los(P.sh.x,P.sh.y,e.pose.head.x,e.pose.head.y))continue;
     const s=d*(e===ai.target?0.6:1)*(e.isPlayer?0.95:1);if(s<bs){bs=s;best=e;}
   }
@@ -864,13 +877,13 @@ function botThink(b){
   if(!best)for(const h of G.helis)if(h.team!==b.team&&h.hp>0&&h.life>0&&Math.hypot(h.x-b.x,h.y-b.y)<1300&&los(P.sh.x,P.sh.y,h.x,h.y))heli=h;
   if(best!==ai.target){
     ai.target=best;
-    if(best){const behind=(best.x-b.x)*b.facing<0;ai.react=G.diff.react*(behind?1.5:1)*rand(0.75,1.3);ai.focus=0;}
+    if(best){const behind=(best.x-b.x)*b.facing<0;ai.react=(G.diff.react*(behind?1.5:1)+(best.isPlayer?0.2:0))*rand(0.75,1.3);ai.focus=0;}
   }
   ai.heli=heli;ai.visible=!!best;
 }
 function botUpdate(b,dt){
   const ai=b.ai,I=b.in,w=b.weapons[b.wi],d=w.def;
-  I.move=0;I.jump=false;I.drop=false;I.fire=false;I.fireEdge=false;I.ads=false;I.crouch=false;I.crouchPress=false;I.reload=false;I.swap=false;I.melee=false;I.sprint=false;
+  I.move=0;I.jump=false;I.jumpV=0;I.drop=false;I.fire=false;I.fireEdge=false;I.ads=false;I.crouch=false;I.crouchPress=false;I.reload=false;I.swap=false;I.melee=false;I.sprint=false;
   ai.thinkT-=dt;if(ai.thinkT<=0){ai.thinkT=rand(0.09,0.15);botThink(b);}
   if(G.over){return;}
   const t=ai.target&&ai.target.alive?ai.target:null;
@@ -888,7 +901,7 @@ function botUpdate(b,dt){
     const dist=Math.hypot(tgt.x-b.x,tgt.y-b.y);
     if(t)ai.react-=dt;
     const ready=(!t||ai.react<=0)&&Math.abs(angDiff(b.aim,want))<0.3;
-    I.ads=dist>320&&b.onGround&&b.slideT<=0;
+    I.ads=dist>(d.scope?300:480)&&b.onGround&&b.slideT<=0&&!(now<ai.pushUntil);
     if(ready&&w.mag>0){
       if(d.auto){
         if(ai.burstT>0){I.fire=true;ai.burstT-=dt;if(ai.burstT<=0)ai.pauseT=rand(0.3,0.85)*(dist>700?1.5:1);}
@@ -908,12 +921,14 @@ function botUpdate(b,dt){
     if(t&&now<ai.retreatUntil){
       I.move=Math.sign(b.x-t.x)||1;I.sprint=true;I.ads=false;I.fire=false;I.fireEdge=false;
       if(b.onGround){const s=surfaceOf(b);if(s&&((b.x<s.x1+20&&I.move<0)||(b.x>s.x2-20&&I.move>0))){if(s.oneWay)I.drop=true;else I.move=0;}}
-    }else if(t&&dist>pref*1.15){
-      if(!ai.goal||now>ai.goalExpire-6){const s=surfaceOf(t)||surfaceBelow(t.x,t.y);if(s){ai.goal={sid:s.id,x:clamp(t.x,s.x1+15,s.x2-15)};ai.goalExpire=now+7;}}
+    }else if(t&&(dist>pref*1.15||now<ai.pushUntil)){
+      if(!ai.goal||now>ai.goalExpire-6||ai.goal.sid!==(surfaceOf(t)||{}).id){const s=surfaceOf(t)||surfaceBelow(t.x,t.y);if(s){ai.goal={sid:s.id,x:clamp(t.x,s.x1+15,s.x2-15)};ai.goalExpire=now+7;}}
       botNav(b,dt);
     }else{
       ai.strafeT-=dt;
-      if(ai.strafeT<=0){ai.strafeT=rand(0.35,1.1);ai.strafeDir=pick([-1,0,1,1,-1]);ai.crouchHold=Math.random()<(d.snd==='sniper'?0.6:0.2);if(Math.random()<0.1&&b.onGround)I.jump=true;}
+      if(ai.strafeT<=0){ai.strafeT=rand(0.4,1.0);ai.strafeDir=pick([-1,1,1,-1,0]);ai.crouchHold=Math.random()<(d.snd==='sniper'?0.5:0.12);
+        if(Math.random()<0.15&&b.onGround){I.jump=true;I.jumpV=rand(420,600);}
+        if(!d.scope&&Math.random()<0.3)ai.pushUntil=now+rand(1,2.2);}
       I.move=ai.strafeDir;I.crouch=ai.crouchHold;
       if(b.onGround){const s=surfaceOf(b);if(s&&((b.x<s.x1+20&&I.move<0)||(b.x>s.x2-20&&I.move>0)))I.move=0;}
     }
@@ -923,7 +938,7 @@ function botUpdate(b,dt){
     else{ai.alertGoal=false;}
     botNav(b,dt);
     if(!(ai.alert&&now-ai.alert.t<2.5)){const want=I.move>0?0.06:I.move<0?Math.PI-0.06:b.aim;b.aim+=clamp(angDiff(b.aim,want),-4*dt,4*dt);}
-    I.sprint=ai.sprintPref&&I.move!==0&&!ai.alert;
+    I.sprint=I.sprint||(ai.sprintPref&&I.move!==0&&!ai.alert);
     if(w.mag<w.def.mag*0.5&&w.reserve>0)I.reload=true;
   }
   if(I.move!==0&&b.onGround){if(Math.abs(b.x-ai.lastX)<0.6){ai.stuckT+=dt;if(ai.stuckT>0.7)I.jump=true;if(ai.stuckT>2.2){ai.goal=null;ai.stuckT=0;}}else ai.stuckT=0;}
@@ -959,8 +974,8 @@ function botNav(b){
     case 'walkoff':I.move=Math.sign(tr.x+tr.dir*30-b.x)||tr.dir;ai.airX=tr.land;break;
     case 'drop':if(Math.abs(dx)<14){I.drop=true;ai.airX=tr.x;}else I.move=Math.sign(dx);break;
     case 'jump':
-      if(tr.dir===0){if(Math.abs(dx)<14){I.jump=true;ai.airX=tr.land;}else I.move=Math.sign(dx);}
-      else{if((tr.dir>0&&b.x>=tr.x-16)||(tr.dir<0&&b.x<=tr.x+16)){I.jump=true;I.move=tr.dir;ai.airX=tr.land;}else I.move=Math.sign(dx);}
+      if(tr.dir===0){if(Math.abs(dx)<14){I.jump=true;I.jumpV=tr.v;ai.airX=tr.land;}else I.move=Math.sign(dx);}
+      else{if((tr.dir>0&&b.x>=tr.x-16)||(tr.dir<0&&b.x<=tr.x+16)){I.jump=true;I.jumpV=tr.v;I.move=tr.dir;ai.airX=tr.land;}else{I.move=Math.sign(dx);I.sprint=true;}}
       break;
   }
 }
