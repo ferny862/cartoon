@@ -1,7 +1,7 @@
 # Stick Ops
 
 A first-person 3D stick-figure shooter styled after modern Call of Duty
-multiplayer: 6 v 6 Team Deathmatch against bots in a ruined city at dusk.
+multiplayer: Team Deathmatch against bots, 6 v 6 up to 12 v 12, on four maps.
 
 Open `index.html` in a desktop browser with hardware acceleration on. It loads
 Three.js from cdnjs, so it needs an internet connection. It is played with a
@@ -11,11 +11,18 @@ keyboard and mouse; the mouse is captured when you deploy, and Esc releases it.
 
 ## What's in it
 
-- **Map:** a ruined city block with a central tower, a house and a sniper
-  platform you can climb by stairs, plus containers, cars, barriers and
-  sandbags for cover.
-- **Loadouts:** M4A1, MP5, KAR98K (with scope overlay) or Model 680 shotgun,
-  plus an X12 sidearm and frag grenades you can cook.
+- **Maps:**
+  - **Downtown:** a burning city block at dusk with a central tower, a house
+    roof and a sniper platform.
+  - **Dockyard:** a rainy container port with stacked containers, a crane and
+    a warehouse roof.
+  - **Outpost:** a sun-baked desert compound with flat rooftops and low walls.
+  - **Shipment:** a tiny container yard at sunset built for close-range chaos.
+- **Lobby size:** 6 v 6 (first to 75), 9 v 9 (first to 100) or 12 v 12 (first
+  to 125).
+- **Loadouts:** M4A1 or MP5 with a red-dot sight, KAR98K with a scope, or the
+  Model 680 shotgun with iron sights, plus an X12 sidearm (iron sights) and
+  frag grenades you can cook.
 - **First-person feel:** aim down sights with field-of-view zoom, recoil, weapon
   bob and sway, tactical sprint, slide, crouch and jump.
 - **HUD:** rotating minimap with red pings when enemies fire, compass bar, team
