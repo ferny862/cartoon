@@ -909,7 +909,7 @@ function botUpdate(b,dt){
       }else{ai.semiT-=dt;if(ai.semiT<=0&&b.fireCd<=0){I.fire=I.fireEdge=true;ai.semiT=d.snd==='sniper'?rand(0.6,1.3):rand(0.25,0.6);}}
     }
     if(w.mag===0)I.reload=true;
-    if(t&&dist<55)I.melee=true;
+    if(t&&dist<50&&Math.random()<dt*2.5)I.melee=true;
     ai.nadeT-=dt;
     if(t&&ai.nadeT<=0&&b.grenades>0&&dist>260&&dist<720&&b.onGround){
       ai.nadeT=rand(10,18);const dx=t.x-b.x,up=0.85;const a=dx>0?-up:Math.PI+up;
@@ -921,7 +921,7 @@ function botUpdate(b,dt){
     if(t&&now<ai.retreatUntil){
       I.move=Math.sign(b.x-t.x)||1;I.sprint=true;I.ads=false;I.fire=false;I.fireEdge=false;
       if(b.onGround){const s=surfaceOf(b);if(s&&((b.x<s.x1+20&&I.move<0)||(b.x>s.x2-20&&I.move>0))){if(s.oneWay)I.drop=true;else I.move=0;}}
-    }else if(t&&(dist>pref*1.15||now<ai.pushUntil)){
+    }else if(t&&(dist>pref*1.15||(now<ai.pushUntil&&dist>Math.max(220,pref*0.6)))){
       if(!ai.goal||now>ai.goalExpire-6||ai.goal.sid!==(surfaceOf(t)||{}).id){const s=surfaceOf(t)||surfaceBelow(t.x,t.y);if(s){ai.goal={sid:s.id,x:clamp(t.x,s.x1+15,s.x2-15)};ai.goalExpire=now+7;}}
       botNav(b,dt);
     }else{
